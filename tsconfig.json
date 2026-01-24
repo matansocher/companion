@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "."
+  },
+  "references": [
+    { "path": "./projects/libs/shared" },
+    { "path": "./projects/apps/companion" },
+    { "path": "./projects/apps/companion-api" }
+  ],
+  "files": []
+}

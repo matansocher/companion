@@ -1,0 +1,53 @@
+{
+  "name": "companion",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "nx run-many --target=serve",
+    "dev:ui": "nx serve companion",
+    "dev:api": "nx serve companion-api",
+    "build": "nx run-many --target=build",
+    "build:ui": "nx build companion",
+    "build:api": "nx build companion-api",
+    "lint": "nx run-many --target=lint",
+    "graph": "nx graph"
+  },
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^5.2.1",
+    "lucide-react": "^0.562.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwind-merge": "^3.4.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@nx/esbuild": "^22.3.3",
+    "@nx/eslint": "^22.3.3",
+    "@nx/js": "^22.3.3",
+    "@nx/node": "^22.3.3",
+    "@nx/vite": "^22.3.3",
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/chrome": "^0.0.300",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "nx": "^22.3.3",
+    "shadcn": "^3.7.0",
+    "tailwindcss": "^4.1.18",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vite": "^7.2.4"
+  }
+}

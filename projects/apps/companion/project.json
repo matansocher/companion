@@ -1,0 +1,60 @@
+{
+  "name": "companion",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "projects/apps/companion/src",
+  "projectType": "application",
+  "tags": ["scope:ui", "type:app"],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "outputPath": "dist/apps/companion"
+      },
+      "configurations": {
+        "development": {
+          "mode": "development"
+        },
+        "production": {
+          "mode": "production"
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/vite:dev-server",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "companion:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "companion:build:development",
+          "hmr": true
+        },
+        "production": {
+          "buildTarget": "companion:build:production",
+          "hmr": false
+        }
+      }
+    },
+    "preview": {
+      "executor": "@nx/vite:preview-server",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "companion:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "companion:build:development"
+        },
+        "production": {
+          "buildTarget": "companion:build:production"
+        }
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}
