@@ -1,12 +1,13 @@
-import { BarChart3, MessageSquare, Send } from 'lucide-react';
+import { BarChart3, MessageCircle, MessageSquare, Send } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-export type TabName = 'analytics' | 'chat' | 'telegram';
+export type TabName = 'analytics' | 'chat' | 'telegram' | 'whatsapp';
 
 const tabs: { name: TabName; label: string; icon: typeof BarChart3 }[] = [
   { name: 'analytics', label: 'Usage', icon: BarChart3 },
   { name: 'chat', label: 'Chat', icon: MessageSquare },
   { name: 'telegram', label: 'Telegram', icon: Send },
+  { name: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
 ];
 
 type BottomTabBarProps = {

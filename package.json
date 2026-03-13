@@ -7,6 +7,7 @@
     "dev": "nx run-many --target=serve",
     "dev:ui": "nx serve companion",
     "dev:api": "nx serve companion-api",
+    "dev:ext": "nx build companion --watch --mode=development",
     "build": "nx run-many --target=build",
     "build:ui": "nx build companion",
     "build:api": "nx build companion-api",

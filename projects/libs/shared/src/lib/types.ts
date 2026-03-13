@@ -97,3 +97,24 @@ export type TelegramMessage = {
   isOwn: boolean;
   senderName: string;
 };
+
+// WhatsApp types
+export type WhatsAppChat = {
+  chatId: string;
+  name: string;
+  lastMessage: string;
+  time: string;
+  unreadCount: number;
+  avatarText: string;
+  avatarUrl: string;
+  isPinned: boolean;
+  isMuted: boolean;
+};
+
+export type WhatsAppMessage = {
+  id: string;
+  text: string;
+  time: string;
+  isOwn: boolean;
+  senderName: string;
+};

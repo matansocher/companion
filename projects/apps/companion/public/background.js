@@ -294,6 +294,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.type === 'GET_WHATSAPP_CHATS') {
+    getWhatsAppChats()
+      .then((result) => sendResponse(result))
+      .catch((error) => {
+        console.error('[Background] Error getting WhatsApp chats:', error);
+        sendResponse({ error: error.message, chats: [] });
+      });
+    return true;
+  }
+
+  if (request.type === 'GET_WHATSAPP_MESSAGES') {
+    getWhatsAppMessages(request.chatId)
+      .then((result) => sendResponse(result))
+      .catch((error) => {
+        console.error('[Background] Error getting WhatsApp messages:', error);
+        sendResponse({ error: error.message, messages: [] });
+      });
+    return true;
+  }
+
   if (request.type === 'GET_USER_PROFILE') {
     chrome.identity.getProfileUserInfo({ accountStatus: 'ANY' }, (userInfo) => {
       sendResponse({ email: userInfo?.email || '', id: userInfo?.id || '' });
@@ -602,6 +622,348 @@ function extractTelegramMessagesFromDB(peerId) {
 
           resolve({ messages });
         };
+      } catch (e) {
+        resolve({ error: e.message, messages: [] });
+      }
+    };
+  });
+}
+
+// ============================================================
+// WhatsApp: Extract chats and messages from web.whatsapp.com
+// ============================================================
+
+async function getWhatsAppChats() {
+  const tabs = await chrome.tabs.query({ url: '*://web.whatsapp.com/*' });
+  if (tabs.length === 0) {
+    return { error: 'no_tab', chats: [] };
+  }
+
+  const tab = tabs[0];
+
+  // Step 1: Get chat list from IndexedDB (reliable JIDs + metadata)
+  const dbResults = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: extractWhatsAppChatsFromDB,
+  });
+
+  const dbData = dbResults?.[0]?.result;
+  if (!dbData || dbData.error) {
+    return { error: dbData?.error || 'extraction_failed', chats: [] };
+  }
+
+  // Step 2: Get avatars + display names from DOM
+  const domResults = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: extractWhatsAppDomAvatars,
+  });
+
+  const domMap = domResults?.[0]?.result || {};
+
+  // Step 3: Merge — enrich DB chats with DOM avatars and display names
+  // Build a phone-number lookup from DOM names (for names that start with +)
+  const phoneToDom = {};
+  for (const [domName, info] of Object.entries(domMap)) {
+    // WhatsApp DOM may show "+972 54-212-1614" — strip to digits for matching
+    const digits = domName.replace(/\D/g, '');
+    if (digits.length >= 7) {
+      phoneToDom[digits] = info;
+    }
+  }
+
+  const chats = dbData.chats.map((chat) => {
+    // Try exact name match first
+    let domInfo = domMap[chat.name];
+    // Try matching by bare phone number from JID
+    if (!domInfo) {
+      const bare = chat.chatId.replace(/@.*/, '');
+      domInfo = domMap[bare];
+      // Try digit-based match (DOM may show formatted phone like "+972 54-212-1614")
+      if (!domInfo && bare.length >= 7) {
+        domInfo = phoneToDom[bare];
+      }
+    }
+    if (domInfo) {
+      return {
+        ...chat,
+        avatarUrl: domInfo.avatarUrl || chat.avatarUrl,
+        // Use DOM display name if the DB name looks like a phone number
+        name: (/^\d+$/.test(chat.name) && domInfo.displayName) ? domInfo.displayName : chat.name,
+      };
+    }
+    return chat;
+  });
+
+  return { chats };
+}
+
+// Extracts avatar images and display names from WhatsApp DOM, keyed by name
+function extractWhatsAppDomAvatars() {
+  try {
+    function getAvatarDataUri(container) {
+      if (!container) return '';
+      const img = container.querySelector('img');
+      if (img && img.naturalWidth > 0) {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          return canvas.toDataURL('image/jpeg', 0.7);
+        } catch { /* CORS */ }
+      }
+      return '';
+    }
+
+    const result = {};
+    const sidePane = document.querySelector('#pane-side');
+    if (!sidePane) return result;
+
+    const rows = sidePane.querySelectorAll('[role="row"]');
+    rows.forEach((row) => {
+      const nameEl = row.querySelector('span[title][dir="auto"]');
+      const displayName = nameEl?.getAttribute('title')?.trim() || '';
+      if (!displayName) return;
+
+      const avatarImg = row.querySelector('img[draggable="false"]');
+      const avatarContainer = avatarImg?.closest('div');
+      const avatarUrl = getAvatarDataUri(avatarContainer);
+
+      // Key by display name so we can match against DB chat names
+      result[displayName] = { displayName, avatarUrl };
+    });
+
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+// Reads the full chat list from WhatsApp's IndexedDB — gives us reliable JIDs
+function extractWhatsAppChatsFromDB() {
+  return new Promise((resolve) => {
+    const req = indexedDB.open('model-storage');
+    req.onerror = () => resolve({ error: 'db_open_failed', chats: [] });
+    req.onsuccess = () => {
+      try {
+        const db = req.result;
+
+        // Step 1: Read contacts for name resolution
+        const contactMap = {};
+        const contactTx = db.transaction('contact', 'readonly');
+        const contactStore = contactTx.objectStore('contact');
+        const contactReq = contactStore.getAll();
+        contactReq.onsuccess = () => {
+          (contactReq.result || []).forEach((c) => {
+            if (c.id) {
+              // Prefer saved contact name > pushname (WhatsApp profile name) > formattedName
+              contactMap[c.id] = c.name || c.pushname || c.formattedName || c.shortName || '';
+              // Also store under the bare number for fallback matching
+              const bare = c.id.replace(/@.*/, '');
+              if (bare && !contactMap[bare]) {
+                contactMap[bare] = contactMap[c.id];
+              }
+            }
+          });
+
+          // Step 2: Read chats
+          const chatTx = db.transaction('chat', 'readonly');
+          const chatStore = chatTx.objectStore('chat');
+          const chatReq = chatStore.getAll();
+          chatReq.onsuccess = () => {
+            const rawChats = chatReq.result || [];
+            db.close();
+
+            const chats = rawChats
+              .filter((c) => {
+                // Skip status broadcast and system chats
+                if (!c.id) return false;
+                if (c.id === 'status@broadcast') return false;
+                if (c.id === '0@c.us') return false;
+                return true;
+              })
+              .map((c) => {
+                // Resolve name: chat.name > contact name (by JID) > contact name (by bare number) > phone number
+                const bare = c.id.replace(/@.*/, '');
+                const name = c.name || contactMap[c.id] || contactMap[bare] || bare;
+
+                // Last message time
+                let time = '';
+                const ts = c.t || c.conversationTimestamp;
+                if (ts) {
+                  const d = new Date(ts * 1000);
+                  const now = new Date();
+                  if (d.toDateString() === now.toDateString()) {
+                    time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  } else {
+                    time = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                  }
+                }
+
+                // Unread count
+                const unreadCount = c.unreadCount || 0;
+
+                // Pinned (pin field is a timestamp if pinned, 0/undefined if not)
+                const isPinned = !!(c.pin);
+
+                // Muted (muteExpiration is a timestamp if muted)
+                const isMuted = !!(c.muteExpiration && c.muteExpiration > Date.now() / 1000);
+
+                // Last message preview
+                let lastMessage = '';
+                if (c.lastMessage) {
+                  lastMessage = c.lastMessage.body || c.lastMessage.caption || '';
+                  if (!lastMessage && c.lastMessage.type && c.lastMessage.type !== 'chat') {
+                    lastMessage = '[' + c.lastMessage.type + ']';
+                  }
+                }
+
+                return {
+                  chatId: c.id,
+                  name,
+                  lastMessage,
+                  time,
+                  unreadCount,
+                  avatarText: name.charAt(0).toUpperCase(),
+                  avatarUrl: '',
+                  isPinned,
+                  isMuted,
+                  _ts: ts || 0, // raw timestamp for sorting
+                };
+              })
+              // Sort: pinned first (by timestamp), then non-pinned by timestamp descending
+              .sort((a, b) => {
+                if (a.isPinned && !b.isPinned) return -1;
+                if (!a.isPinned && b.isPinned) return 1;
+                return b._ts - a._ts;
+              });
+
+            resolve({ chats });
+          };
+          chatReq.onerror = () => { db.close(); resolve({ error: 'chat_read_failed', chats: [] }); };
+        };
+        contactReq.onerror = () => { db.close(); resolve({ error: 'contact_read_failed', chats: [] }); };
+      } catch (e) {
+        resolve({ error: e.message, chats: [] });
+      }
+    };
+  });
+}
+
+async function getWhatsAppMessages(chatId) {
+  const tabs = await chrome.tabs.query({ url: '*://web.whatsapp.com/*' });
+  if (tabs.length === 0) {
+    return { error: 'no_tab', messages: [] };
+  }
+
+  const tab = tabs[0];
+
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: extractWhatsAppMessagesFromDB,
+    args: [chatId],
+  });
+
+  const data = results?.[0]?.result;
+  if (!data || data.error) {
+    return { error: data?.error || 'extraction_failed', messages: [] };
+  }
+
+  return { messages: data.messages };
+}
+
+// Reads messages from WhatsApp's IndexedDB filtered by chat JID
+function extractWhatsAppMessagesFromDB(chatJid) {
+  return new Promise((resolve) => {
+    const req = indexedDB.open('model-storage');
+    req.onerror = () => resolve({ error: 'db_open_failed', messages: [] });
+    req.onsuccess = () => {
+      try {
+        const db = req.result;
+
+        // Also load contacts for sender name resolution
+        const contactMap = {};
+        const contactTx = db.transaction('contact', 'readonly');
+        const contactStore = contactTx.objectStore('contact');
+        const contactReq = contactStore.getAll();
+        contactReq.onsuccess = () => {
+          (contactReq.result || []).forEach(c => {
+            if (c.id) contactMap[c.id] = c.name || c.pushname || c.shortName || '';
+          });
+
+          // Now read messages
+          const tx = db.transaction('message', 'readonly');
+          const store = tx.objectStore('message');
+          const messages = [];
+          const cursor = store.openCursor(null, 'prev');
+
+          cursor.onsuccess = () => {
+            const result = cursor.result;
+            if (!result || messages.length >= 50) {
+              db.close();
+              // Sort ascending (we collected in reverse)
+              messages.reverse();
+              resolve({ messages });
+              return;
+            }
+
+            const msg = result.value;
+            // Check if this message belongs to the target chat
+            const msgId = msg.id || '';
+            const belongsToChat = msgId.includes('_' + chatJid + '_') || msgId.startsWith('true_' + chatJid) || msgId.startsWith('false_' + chatJid);
+
+            if (belongsToChat && msg.type !== 'revoked' && msg.type !== 'e2e_notification' && msg.type !== 'notification_template') {
+              const isOwn = msgId.startsWith('true_');
+
+              let text = '';
+              if (msg.type === 'chat' || msg.type === 'text') {
+                text = msg.body || '';
+              } else if (msg.type === 'image' || msg.type === 'video' || msg.type === 'gif') {
+                text = msg.caption || '[' + (msg.type === 'image' ? 'Photo' : 'Video') + ']';
+              } else if (msg.type === 'ptt' || msg.type === 'audio') {
+                text = '[Voice message]';
+              } else if (msg.type === 'document') {
+                text = '[File] ' + (msg.filename || '');
+              } else if (msg.type === 'sticker') {
+                text = '[Sticker]';
+              } else if (msg.type === 'vcard' || msg.type === 'multi_vcard') {
+                text = '[Contact]';
+              } else if (msg.type === 'location' || msg.type === 'liveLocation') {
+                text = '[Location]';
+              } else if (msg.type === 'poll_creation') {
+                text = '[Poll]';
+              } else if (msg.type === 'notification') {
+                result.continue();
+                return;
+              } else {
+                text = msg.body || '[' + msg.type + ']';
+              }
+
+              // Time
+              const d = new Date(msg.t * 1000);
+              const now = new Date();
+              let time;
+              if (d.toDateString() === now.toDateString()) {
+                time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              } else {
+                time = d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              }
+
+              // Sender name for group chats
+              let senderName = '';
+              if (!isOwn && msg.from) {
+                senderName = contactMap[msg.from] || msg.from.replace(/@.*/, '');
+              }
+
+              messages.push({ id: msgId, text, time, isOwn, senderName });
+            }
+
+            result.continue();
+          };
+          cursor.onerror = () => { db.close(); resolve({ error: 'cursor_error', messages: [] }); };
+        };
+        contactReq.onerror = () => { db.close(); resolve({ error: 'contact_read_failed', messages: [] }); };
       } catch (e) {
         resolve({ error: e.message, messages: [] });
       }
