@@ -1,17 +1,17 @@
-import type { TimeRange } from "@companion/shared"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown } from 'lucide-react';
+import type { TimeRange } from '@companion/shared';
 
 const options: { value: TimeRange; label: string }[] = [
-  { value: "today", label: "Today" },
-  { value: "7days", label: "7 Days" },
-  { value: "30days", label: "30 Days" },
-  { value: "all", label: "All Time" },
-]
+  { value: 'today', label: 'Today' },
+  { value: '7days', label: '7 Days' },
+  { value: '30days', label: '30 Days' },
+  { value: 'all', label: 'All Time' },
+];
 
 type TimeRangeFilterProps = {
-  value: TimeRange
-  onChange: (range: TimeRange) => void
-}
+  value: TimeRange;
+  onChange: (range: TimeRange) => void;
+};
 
 export function TimeRangeFilter({ value, onChange }: TimeRangeFilterProps) {
   return (
@@ -29,5 +29,5 @@ export function TimeRangeFilter({ value, onChange }: TimeRangeFilterProps) {
       </select>
       <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
     </div>
-  )
+  );
 }

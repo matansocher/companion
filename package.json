@@ -11,6 +11,8 @@
     "build:ui": "nx build companion",
     "build:api": "nx build companion-api",
     "lint": "nx run-many --target=lint",
+    "format": "prettier --write \"projects/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"projects/**/*.{ts,tsx}\"",
     "graph": "nx graph"
   },
   "dependencies": {
@@ -32,6 +34,7 @@
     "@nx/node": "^22.3.3",
     "@nx/vite": "^22.3.3",
     "@tailwindcss/vite": "^4.1.18",
+    "@trivago/prettier-plugin-sort-imports": "^6.0.2",
     "@types/chrome": "^0.0.300",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
@@ -44,6 +47,7 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "nx": "^22.3.3",
+    "prettier": "^3.8.1",
     "shadcn": "^3.7.0",
     "tailwindcss": "^4.1.18",
     "typescript": "~5.9.3",

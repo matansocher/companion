@@ -1,35 +1,27 @@
-import { useRef, useEffect } from "react"
-import { ChatMessage, type Message } from "./ChatMessage"
-import { ChatInput } from "./ChatInput"
-import { SettingsDropdown } from "./SettingsDropdown"
-import { Skeleton } from "./ui/skeleton"
-import { Bot, Loader2, BarChart3 } from "lucide-react"
-import type { Theme } from "./Settings"
+import { BarChart3, Bot, Loader2 } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { ChatInput } from './ChatInput';
+import { ChatMessage, type Message } from './ChatMessage';
+import type { Theme } from './Settings';
+import { SettingsDropdown } from './SettingsDropdown';
+import { Skeleton } from './ui/skeleton';
 
 type ChatProps = {
-  messages: Message[]
-  onSendMessage: (content: string) => void
-  onOpenSettings: () => void
-  onOpenAnalytics: () => void
-  theme: Theme
-  onThemeChange: (theme: Theme) => void
-  isLoading?: boolean
-}
+  messages: Message[];
+  onSendMessage: (content: string) => void;
+  onOpenSettings: () => void;
+  onOpenAnalytics: () => void;
+  theme: Theme;
+  onThemeChange: (theme: Theme) => void;
+  isLoading?: boolean;
+};
 
-export function Chat({
-  messages,
-  onSendMessage,
-  onOpenSettings,
-  onOpenAnalytics,
-  theme,
-  onThemeChange,
-  isLoading = false,
-}: ChatProps) {
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+export function Chat({ messages, onSendMessage, onOpenSettings, onOpenAnalytics, theme, onThemeChange, isLoading = false }: ChatProps) {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -42,18 +34,10 @@ export function Chat({
           <h1 className="text-sm font-semibold text-foreground">Companion</h1>
           <p className="text-xs text-muted-foreground">Your page assistant</p>
         </div>
-        <button
-          onClick={onOpenAnalytics}
-          className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-muted"
-          title="Analytics"
-        >
+        <button onClick={onOpenAnalytics} className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-muted" title="Analytics">
           <BarChart3 className="h-5 w-5 text-muted-foreground" />
         </button>
-        <SettingsDropdown
-          theme={theme}
-          onThemeChange={onThemeChange}
-          onOpenSettings={onOpenSettings}
-        />
+        <SettingsDropdown theme={theme} onThemeChange={onThemeChange} onOpenSettings={onOpenSettings} />
       </div>
 
       {/* Messages */}
@@ -63,12 +47,8 @@ export function Chat({
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
               <Bot className="h-8 w-8 text-muted-foreground" />
             </div>
-            <h2 className="mb-2 text-lg font-medium text-foreground">
-              How can I help you?
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Ask me anything about the current page
-            </p>
+            <h2 className="mb-2 text-lg font-medium text-foreground">How can I help you?</h2>
+            <p className="text-sm text-muted-foreground">Ask me anything about the current page</p>
           </div>
         ) : (
           <div className="py-4">
@@ -102,5 +82,5 @@ export function Chat({
       {/* Input */}
       <ChatInput onSend={onSendMessage} disabled={isLoading} />
     </div>
-  )
+  );
 }

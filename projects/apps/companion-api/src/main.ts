@@ -1,17 +1,19 @@
-import 'dotenv/config'
-import express from 'express'
-import cors from 'cors'
-import { chatRoutes } from './routes/chat.routes'
+import cors from 'cors';
+import 'dotenv/config';
+import express from 'express';
+import { chatRoutes } from './routes/chat.routes';
 
-const app = express()
-const port = process.env.PORT || 3000
+const app = express();
+const port = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
-  credentials: true
-}))
-app.use(express.json({ limit: '1mb' })) // Increase limit for page content
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || '*',
+    credentials: true,
+  }),
+);
+app.use(express.json({ limit: '1mb' })); // Increase limit for page content
 
 // Health check endpoint
 app.get('/health', (_req, res) => {
@@ -20,22 +22,22 @@ app.get('/health', (_req, res) => {
     timestamp: new Date().toISOString(),
     openai: {
       configured: !!process.env.OPENAI_API_KEY,
-      model: process.env.OPENAI_MODEL || 'gpt-4o-mini'
-    }
-  })
-})
+      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    },
+  });
+});
 
 // API routes
-app.use('/api/chat', chatRoutes)
+app.use('/api/chat', chatRoutes);
 
 // Error handling middleware
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[Server] Unhandled error:', err)
+  console.error('[Server] Unhandled error:', err);
   res.status(500).json({
     success: false,
-    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message
-  })
-})
+    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+  });
+});
 
 // Start server
 app.listen(port, () => {
@@ -48,5 +50,5 @@ app.listen(port, () => {
 ║  OpenAI:  ${process.env.OPENAI_API_KEY ? '✓ Configured' : '✗ Not configured (set OPENAI_API_KEY)'}               ║
 ║  Model:   ${process.env.OPENAI_MODEL || 'gpt-4o-mini'}                                  ║
 ╚════════════════════════════════════════════════════════════╝
-  `)
-})
+  `);
+});

@@ -1,32 +1,32 @@
-import { useState } from "react"
-import { X, Plus } from "lucide-react"
+import { Plus, X } from 'lucide-react';
+import { useState } from 'react';
 
 type BlocklistEditorProps = {
-  blocklist: string[]
-  onChange: (blocklist: string[]) => void
-}
+  blocklist: string[];
+  onChange: (blocklist: string[]) => void;
+};
 
 export function BlocklistEditor({ blocklist, onChange }: BlocklistEditorProps) {
-  const [input, setInput] = useState("")
+  const [input, setInput] = useState('');
 
   const handleAdd = () => {
-    const domain = input.trim().toLowerCase()
+    const domain = input.trim().toLowerCase();
     if (domain && !blocklist.includes(domain)) {
-      onChange([...blocklist, domain])
-      setInput("")
+      onChange([...blocklist, domain]);
+      setInput('');
     }
-  }
+  };
 
   const handleRemove = (domain: string) => {
-    onChange(blocklist.filter((d) => d !== domain))
-  }
+    onChange(blocklist.filter((d) => d !== domain));
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault()
-      handleAdd()
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAdd();
     }
-  }
+  };
 
   return (
     <div>
@@ -51,15 +51,9 @@ export function BlocklistEditor({ blocklist, onChange }: BlocklistEditorProps) {
       {blocklist.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {blocklist.map((domain) => (
-            <span
-              key={domain}
-              className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-foreground"
-            >
+            <span key={domain} className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-foreground">
               {domain}
-              <button
-                onClick={() => handleRemove(domain)}
-                className="flex h-4 w-4 items-center justify-center rounded-full hover:bg-foreground/10"
-              >
+              <button onClick={() => handleRemove(domain)} className="flex h-4 w-4 items-center justify-center rounded-full hover:bg-foreground/10">
                 <X className="h-3 w-3" />
               </button>
             </span>
@@ -67,5 +61,5 @@ export function BlocklistEditor({ blocklist, onChange }: BlocklistEditorProps) {
         </div>
       )}
     </div>
-  )
+  );
 }

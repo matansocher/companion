@@ -1,73 +1,59 @@
-import { useState, useRef, useEffect } from "react"
-import {
-  Settings,
-  Moon,
-  Sun,
-  Monitor,
-  ChevronDown,
-  Check,
-  Cog,
-  BarChart3,
-} from "lucide-react"
-import type { Theme } from "./Settings"
+import { BarChart3, Check, ChevronDown, Cog, Monitor, Moon, Settings, Sun } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import type { Theme } from './Settings';
 
 type SettingsDropdownProps = {
-  theme: Theme
-  onThemeChange: (theme: Theme) => void
-  onOpenSettings: () => void
-  onOpenAnalytics?: () => void
-}
+  theme: Theme;
+  onThemeChange: (theme: Theme) => void;
+  onOpenSettings: () => void;
+  onOpenAnalytics?: () => void;
+};
 
-export function SettingsDropdown({
-  theme,
-  onThemeChange,
-  onOpenSettings,
-  onOpenAnalytics,
-}: SettingsDropdownProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [showThemeOptions, setShowThemeOptions] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
+export function SettingsDropdown({ theme, onThemeChange, onOpenSettings, onOpenAnalytics }: SettingsDropdownProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [showThemeOptions, setShowThemeOptions] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
-        setShowThemeOptions(false)
+        setIsOpen(false);
+        setShowThemeOptions(false);
       }
-    }
+    };
 
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const themeOptions: { value: Theme; label: string; icon: React.ReactNode }[] = [
-    { value: "light", label: "Light", icon: <Sun className="h-4 w-4" /> },
-    { value: "dark", label: "Dark", icon: <Moon className="h-4 w-4" /> },
-    { value: "system", label: "System", icon: <Monitor className="h-4 w-4" /> },
-  ]
+    { value: 'light', label: 'Light', icon: <Sun className="h-4 w-4" /> },
+    { value: 'dark', label: 'Dark', icon: <Moon className="h-4 w-4" /> },
+    { value: 'system', label: 'System', icon: <Monitor className="h-4 w-4" /> },
+  ];
 
   const handleThemeSelect = (newTheme: Theme) => {
-    onThemeChange(newTheme)
-    setShowThemeOptions(false)
-    setIsOpen(false)
-  }
+    onThemeChange(newTheme);
+    setShowThemeOptions(false);
+    setIsOpen(false);
+  };
 
   const handleOpenSettings = () => {
-    setIsOpen(false)
-    setShowThemeOptions(false)
-    onOpenSettings()
-  }
+    setIsOpen(false);
+    setShowThemeOptions(false);
+    onOpenSettings();
+  };
 
-  const currentThemeOption = themeOptions.find((opt) => opt.value === theme)
+  const currentThemeOption = themeOptions.find((opt) => opt.value === theme);
 
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Trigger Button */}
       <button
         onClick={() => {
-          setIsOpen(!isOpen)
-          setShowThemeOptions(false)
+          setIsOpen(!isOpen);
+          setShowThemeOptions(false);
         }}
         className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-muted"
         aria-label="Settings"
@@ -80,23 +66,14 @@ export function SettingsDropdown({
         <div className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-border bg-secondary shadow-lg">
           {/* Theme Option */}
           <div>
-            <button
-              className="flex w-full items-center justify-between px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted"
-              onClick={() => setShowThemeOptions(!showThemeOptions)}
-            >
+            <button className="flex w-full items-center justify-between px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted" onClick={() => setShowThemeOptions(!showThemeOptions)}>
               <span className="flex items-center gap-3">
                 {currentThemeOption?.icon}
                 <span>Theme</span>
               </span>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                  {currentThemeOption?.label}
-                </span>
-                <ChevronDown
-                  className={`h-4 w-4 text-muted-foreground transition-transform ${
-                    showThemeOptions ? "rotate-180" : ""
-                  }`}
-                />
+                <span className="text-xs text-muted-foreground">{currentThemeOption?.label}</span>
+                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${showThemeOptions ? 'rotate-180' : ''}`} />
               </div>
             </button>
 
@@ -113,9 +90,7 @@ export function SettingsDropdown({
                       {option.icon}
                       <span>{option.label}</span>
                     </span>
-                    {theme === option.value && (
-                      <Check className="h-4 w-4 text-primary" />
-                    )}
+                    {theme === option.value && <Check className="h-4 w-4 text-primary" />}
                   </button>
                 ))}
               </div>
@@ -129,9 +104,9 @@ export function SettingsDropdown({
           {onOpenAnalytics && (
             <button
               onClick={() => {
-                setIsOpen(false)
-                setShowThemeOptions(false)
-                onOpenAnalytics()
+                setIsOpen(false);
+                setShowThemeOptions(false);
+                onOpenAnalytics();
               }}
               className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted"
             >
@@ -141,15 +116,12 @@ export function SettingsDropdown({
           )}
 
           {/* Settings Page Option */}
-          <button
-            onClick={handleOpenSettings}
-            className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted"
-          >
+          <button onClick={handleOpenSettings} className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted">
             <Cog className="h-4 w-4" />
             <span>Settings</span>
           </button>
         </div>
       )}
     </div>
-  )
+  );
 }

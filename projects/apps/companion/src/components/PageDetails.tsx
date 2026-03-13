@@ -1,59 +1,49 @@
-import { useState, useEffect, useCallback } from "react"
-import type { TimeRange, PageVisit } from "@companion/shared"
-import { getVisitsForDomain, formatDuration, categorizeDomain, getAnalyticsSettings } from "../lib/analytics-storage"
-import { useActiveSession } from "../lib/use-active-session"
-import { TimeRangeFilter } from "./TimeRangeFilter"
-import { PageVisitItem } from "./PageVisitItem"
-import { ArrowLeft } from "lucide-react"
-import type { DomainCategory } from "@companion/shared"
+import { ArrowLeft } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import type { PageVisit, TimeRange } from '@companion/shared';
+import type { DomainCategory } from '@companion/shared';
+import { categorizeDomain, formatDuration, getAnalyticsSettings, getVisitsForDomain } from '../lib/analytics-storage';
+import { useActiveSession } from '../lib/use-active-session';
+import { PageVisitItem } from './PageVisitItem';
+import { TimeRangeFilter } from './TimeRangeFilter';
 
 type PageDetailsProps = {
-  domain: string
-  onBack: () => void
-}
+  domain: string;
+  onBack: () => void;
+};
 
 export function PageDetails({ domain, onBack }: PageDetailsProps) {
-  const [timeRange, setTimeRange] = useState<TimeRange>("today")
-  const [visits, setVisits] = useState<PageVisit[]>([])
-  const [customCategories, setCustomCategories] = useState<Record<string, DomainCategory>>({})
-  const { session, liveElapsed } = useActiveSession()
+  const [timeRange, setTimeRange] = useState<TimeRange>('today');
+  const [visits, setVisits] = useState<PageVisit[]>([]);
+  const [customCategories, setCustomCategories] = useState<Record<string, DomainCategory>>({});
+  const { session, liveElapsed } = useActiveSession();
 
-  const isActive = session?.domain === domain
+  const isActive = session?.domain === domain;
 
   const loadData = useCallback(async () => {
-    const [data, settings] = await Promise.all([
-      getVisitsForDomain(domain, timeRange),
-      getAnalyticsSettings(),
-    ])
-    setVisits(data)
-    setCustomCategories(settings.customCategories)
-  }, [domain, timeRange])
+    const [data, settings] = await Promise.all([getVisitsForDomain(domain, timeRange), getAnalyticsSettings()]);
+    setVisits(data);
+    setCustomCategories(settings.customCategories);
+  }, [domain, timeRange]);
 
   useEffect(() => {
-    loadData()
-    const interval = setInterval(loadData, 5000)
-    return () => clearInterval(interval)
-  }, [loadData])
+    loadData();
+    const interval = setInterval(loadData, 5000);
+    return () => clearInterval(interval);
+  }, [loadData]);
 
-  const storedDuration = visits.reduce((sum, v) => sum + v.duration, 0)
-  const totalDuration = storedDuration + (isActive ? liveElapsed : 0)
-  const category = categorizeDomain(domain, customCategories)
+  const storedDuration = visits.reduce((sum, v) => sum + v.duration, 0);
+  const totalDuration = storedDuration + (isActive ? liveElapsed : 0);
+  const category = categorizeDomain(domain, customCategories);
 
   return (
     <div className="flex h-full flex-col bg-background">
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <button
-          onClick={onBack}
-          className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-muted"
-        >
+        <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-muted">
           <ArrowLeft className="h-5 w-5 text-foreground" />
         </button>
-        <img
-          src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`}
-          alt=""
-          className="h-6 w-6 rounded"
-        />
+        <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`} alt="" className="h-6 w-6 rounded" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="text-sm font-semibold text-foreground truncate">{domain}</h1>
@@ -68,7 +58,8 @@ export function PageDetails({ domain, onBack }: PageDetailsProps) {
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            {category} · <span className={isActive ? "tabular-nums text-green-500 font-medium" : ""}>{formatDuration(totalDuration)}</span> · {visits.length + (isActive ? 1 : 0)} visit{visits.length + (isActive ? 1 : 0) !== 1 ? "s" : ""}
+            {category} · <span className={isActive ? 'tabular-nums text-green-500 font-medium' : ''}>{formatDuration(totalDuration)}</span> · {visits.length + (isActive ? 1 : 0)} visit
+            {visits.length + (isActive ? 1 : 0) !== 1 ? 's' : ''}
           </p>
         </div>
       </div>
@@ -86,9 +77,7 @@ export function PageDetails({ domain, onBack }: PageDetailsProps) {
                 <span className="relative inline-flex h-3 w-3 rounded-full bg-green-500" />
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">
-                  {session.title || session.url}
-                </p>
+                <p className="text-sm font-medium text-foreground truncate">{session.title || session.url}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground truncate">{session.url}</p>
               </div>
               <div className="text-right shrink-0">
@@ -100,9 +89,7 @@ export function PageDetails({ domain, onBack }: PageDetailsProps) {
         )}
 
         {visits.length === 0 && !isActive ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            No visits in this time range
-          </p>
+          <p className="py-8 text-center text-sm text-muted-foreground">No visits in this time range</p>
         ) : (
           <div className="space-y-0.5">
             {visits.map((visit) => (
@@ -112,5 +99,5 @@ export function PageDetails({ domain, onBack }: PageDetailsProps) {
         )}
       </div>
     </div>
-  )
+  );
 }
