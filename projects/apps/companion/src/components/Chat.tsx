@@ -1,22 +1,16 @@
-import { BarChart3, Bot, Loader2 } from 'lucide-react';
+import { Bot, Loader2 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { ChatInput } from './ChatInput';
 import { ChatMessage, type Message } from './ChatMessage';
-import type { Theme } from './Settings';
-import { SettingsDropdown } from './SettingsDropdown';
 import { Skeleton } from './ui/skeleton';
 
 type ChatProps = {
   messages: Message[];
   onSendMessage: (content: string) => void;
-  onOpenSettings: () => void;
-  onOpenAnalytics: () => void;
-  theme: Theme;
-  onThemeChange: (theme: Theme) => void;
   isLoading?: boolean;
 };
 
-export function Chat({ messages, onSendMessage, onOpenSettings, onOpenAnalytics, theme, onThemeChange, isLoading = false }: ChatProps) {
+export function Chat({ messages, onSendMessage, isLoading = false }: ChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -25,21 +19,6 @@ export function Chat({ messages, onSendMessage, onOpenSettings, onOpenAnalytics,
 
   return (
     <div className="flex h-full flex-col bg-background">
-      {/* Header */}
-      <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary">
-          <Bot className="h-5 w-5 text-primary-foreground" />
-        </div>
-        <div className="flex-1">
-          <h1 className="text-sm font-semibold text-foreground">Companion</h1>
-          <p className="text-xs text-muted-foreground">Your page assistant</p>
-        </div>
-        <button onClick={onOpenAnalytics} className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-muted" title="Analytics">
-          <BarChart3 className="h-5 w-5 text-muted-foreground" />
-        </button>
-        <SettingsDropdown theme={theme} onThemeChange={onThemeChange} onOpenSettings={onOpenSettings} />
-      </div>
-
       {/* Messages */}
       <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (

@@ -76,3 +76,24 @@ export type FocusBudget = {
 };
 
 export type BudgetStatus = 'ok' | 'warning' | 'exceeded';
+
+// Telegram types
+export type TelegramChat = {
+  peerId: string;
+  name: string;
+  lastMessage: string;
+  time: string;
+  unreadCount: number;
+  avatarText: string; // initials fallback
+  avatarUrl: string; // data URI of the avatar image
+  isPinned: boolean;
+  isMuted: boolean;
+};
+
+export type TelegramMessage = {
+  id: string;
+  text: string;
+  time: string;
+  isOwn: boolean;
+  senderName: string;
+};

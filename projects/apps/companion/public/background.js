@@ -273,6 +273,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
     return true;
   }
+
+  if (request.type === 'GET_TELEGRAM_CHATS') {
+    getTelegramChats()
+      .then((result) => sendResponse(result))
+      .catch((error) => {
+        console.error('[Background] Error getting Telegram chats:', error);
+        sendResponse({ error: error.message, chats: [] });
+      });
+    return true;
+  }
+
+  if (request.type === 'GET_TELEGRAM_MESSAGES') {
+    getTelegramMessages(request.peerId)
+      .then((result) => sendResponse(result))
+      .catch((error) => {
+        console.error('[Background] Error getting Telegram messages:', error);
+        sendResponse({ error: error.message, messages: [] });
+      });
+    return true;
+  }
+
+  if (request.type === 'GET_USER_PROFILE') {
+    chrome.identity.getProfileUserInfo({ accountStatus: 'ANY' }, (userInfo) => {
+      sendResponse({ email: userInfo?.email || '', id: userInfo?.id || '' });
+    });
+    return true;
+  }
 });
 
 // Get content from the active tab
@@ -334,6 +361,252 @@ async function getPageContent() {
       error: error.message
     };
   }
+}
+
+// ============================================================
+// Telegram: Extract chats from web.telegram.org
+// ============================================================
+
+async function getTelegramChats() {
+  const tabs = await chrome.tabs.query({ url: '*://web.telegram.org/*' });
+
+  if (tabs.length === 0) {
+    return { error: 'no_tab', chats: [] };
+  }
+
+  const tab = tabs[0];
+
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: extractTelegramChats,
+  });
+
+  const data = results?.[0]?.result;
+  if (!data || data.error) {
+    return { error: data?.error || 'extraction_failed', chats: [] };
+  }
+
+  return { chats: data.chats };
+}
+
+// Runs in the context of the Telegram Web page
+function extractTelegramChats() {
+  try {
+    // Convert an <img> or <canvas> element to a data URI
+    function getAvatarDataUri(container) {
+      if (!container) return '';
+      // Try img first
+      const img = container.querySelector('img');
+      if (img && img.naturalWidth > 0) {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          return canvas.toDataURL('image/jpeg', 0.7);
+        } catch { /* CORS or tainted canvas */ }
+      }
+      // Try canvas element directly
+      const canvasEl = container.querySelector('canvas');
+      if (canvasEl) {
+        try {
+          return canvasEl.toDataURL('image/jpeg', 0.7);
+        } catch { /* tainted */ }
+      }
+      return '';
+    }
+
+    const chats = [];
+
+    // --- Telegram Web K (web.telegram.org/k/) ---
+    const kItems = document.querySelectorAll('.chatlist-chat');
+    if (kItems.length > 0) {
+      kItems.forEach((item) => {
+        const nameEl = item.querySelector('.peer-title');
+        const lastMsgEl = item.querySelector('.tgico-pinnedchat')
+          ? item.querySelector('.message-subtitles')
+          : item.querySelector('.subtitle-text');
+        const timeEl = item.querySelector('.message-time');
+        const unreadEl = item.querySelector('.unread-count');
+        const avatarContainer = item.querySelector('.avatar-container, .Avatar, .dialog-avatar');
+        const avatarTextEl = item.querySelector('.avatar-text');
+        const isPinned = !!item.querySelector('.tgico-pinnedchat');
+        const isMuted = !!item.querySelector('.tgico-mute');
+
+        const name = nameEl?.textContent?.trim() || '';
+        if (!name) return;
+
+        chats.push({
+          name,
+          lastMessage: lastMsgEl?.textContent?.trim() || '',
+          time: timeEl?.textContent?.trim() || '',
+          unreadCount: parseInt(unreadEl?.textContent?.trim() || '0', 10) || 0,
+          avatarText: avatarTextEl?.textContent?.trim() || name.charAt(0).toUpperCase(),
+          avatarUrl: getAvatarDataUri(avatarContainer),
+          isPinned,
+          isMuted,
+        });
+      });
+
+      return { chats };
+    }
+
+    // --- Telegram Web A (web.telegram.org/a/) ---
+    const aItems = document.querySelectorAll('.ListItem.chat-item-clickable');
+    if (aItems.length > 0) {
+      aItems.forEach((item) => {
+        const linkEl = item.querySelector('a[href^="#"]');
+        const peerId = linkEl?.getAttribute('href')?.replace('#', '') || '';
+        const nameEl = item.querySelector('.fullName');
+        const lastMsgEl = item.querySelector('.last-message-summary');
+        const timeEl = item.querySelector('.LastMessageMeta .time');
+        const avatarContainer = item.querySelector('.Avatar');
+        const isPinned = !!item.querySelector('.icon-pinned-chat');
+        const isMuted = !!item.querySelector('.icon-muted');
+
+        // Unread badge: look for a numeric badge inside chat-badge-transition
+        const badgeEls = item.querySelectorAll('.chat-badge-transition');
+        let unreadCount = 0;
+        badgeEls.forEach((b) => {
+          const text = b.textContent?.trim();
+          const num = parseInt(text, 10);
+          if (num > 0) unreadCount = num;
+        });
+
+        const name = nameEl?.textContent?.trim() || '';
+        if (!name) return;
+        if (name === 'Archived Chats') return;
+
+        chats.push({
+          peerId,
+          name,
+          lastMessage: lastMsgEl?.textContent?.trim() || '',
+          time: timeEl?.textContent?.trim() || '',
+          unreadCount,
+          avatarText: name.charAt(0).toUpperCase(),
+          avatarUrl: getAvatarDataUri(avatarContainer),
+          isPinned,
+          isMuted,
+        });
+      });
+
+      return { chats };
+    }
+
+    // --- Fallback: generic scraping ---
+    return { error: 'unrecognized_dom', chats: [] };
+  } catch (error) {
+    return { error: error.message, chats: [] };
+  }
+}
+
+async function getTelegramMessages(peerId) {
+  const tabs = await chrome.tabs.query({ url: '*://web.telegram.org/*' });
+  if (tabs.length === 0) {
+    return { error: 'no_tab', messages: [] };
+  }
+
+  const tab = tabs[0];
+
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: extractTelegramMessagesFromDB,
+    args: [peerId],
+  });
+
+  const data = results?.[0]?.result;
+  if (!data || data.error) {
+    return { error: data?.error || 'extraction_failed', messages: [] };
+  }
+
+  return { messages: data.messages };
+}
+
+// Runs in the context of the Telegram Web page — reads from IndexedDB
+function extractTelegramMessagesFromDB(peerId) {
+  return new Promise((resolve) => {
+    const req = indexedDB.open('tt-data');
+    req.onerror = () => resolve({ error: 'db_open_failed', messages: [] });
+    req.onsuccess = () => {
+      try {
+        const db = req.result;
+        const tx = db.transaction('store', 'readonly');
+        const store = tx.objectStore('store');
+        const getReq = store.get('tt-global-state');
+        getReq.onerror = () => { db.close(); resolve({ error: 'read_failed', messages: [] }); };
+        getReq.onsuccess = () => {
+          const state = getReq.result;
+          db.close();
+          if (!state) { resolve({ error: 'no_state', messages: [] }); return; }
+
+          const chatMessages = state.messages?.byChatId?.[peerId];
+          if (!chatMessages?.byId) { resolve({ error: 'no_messages_for_chat', messages: [] }); return; }
+
+          const users = state.users?.byId || {};
+          const currentUserId = state.currentUserId;
+
+          const msgList = Object.values(chatMessages.byId);
+          // Sort by date ascending
+          msgList.sort((a, b) => a.date - b.date);
+
+          // Take last 50 messages
+          const recent = msgList.slice(-50);
+
+          const messages = recent.map((msg) => {
+            let text = msg.content?.text?.text || '';
+
+            // Handle non-text messages
+            if (!text) {
+              if (msg.content?.sticker) text = msg.content.sticker.emoji || '[Sticker]';
+              else if (msg.content?.photo) text = msg.content.photo.caption || '[Photo]';
+              else if (msg.content?.video) text = '[Video]';
+              else if (msg.content?.document) text = '[File] ' + (msg.content.document.fileName || '');
+              else if (msg.content?.voice) text = '[Voice message]';
+              else if (msg.content?.audio) text = '[Audio]';
+              else if (msg.content?.contact) text = '[Contact]';
+              else if (msg.content?.location) text = '[Location]';
+              else if (msg.content?.poll) text = '[Poll] ' + (msg.content.poll.summary?.question || '');
+              else if (msg.content?.action) text = '[Action]';
+              else text = '[Message]';
+            }
+
+            // Get sender name for group chats
+            let senderName = '';
+            const senderId = msg.senderId;
+            if (senderId && senderId !== currentUserId && !msg.isOutgoing) {
+              const user = users[senderId];
+              if (user) {
+                senderName = [user.firstName, user.lastName].filter(Boolean).join(' ');
+              }
+            }
+
+            // Format time
+            const d = new Date(msg.date * 1000);
+            const now = new Date();
+            let time;
+            if (d.toDateString() === now.toDateString()) {
+              time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } else {
+              time = d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+
+            return {
+              id: String(msg.id),
+              text,
+              time,
+              isOwn: !!msg.isOutgoing,
+              senderName,
+            };
+          });
+
+          resolve({ messages });
+        };
+      } catch (e) {
+        resolve({ error: e.message, messages: [] });
+      }
+    };
+  });
 }
 
 // This function runs in the context of the web page

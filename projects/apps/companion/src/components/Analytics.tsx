@@ -1,26 +1,20 @@
-import { BarChart3, MessageSquare, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AnalyticsSettings, DomainSummary, FocusBudget, TimeRange } from '@companion/shared';
-import type { Theme } from '@companion/shared';
 import { categorizeDomain, formatDuration, getAnalyticsSettings, getDailyTotals, getDomainSummaries, getFocusBudgets, getTodayDomainDurations } from '../lib/analytics-storage';
 import { useActiveSession } from '../lib/use-active-session';
 import { cn } from '../lib/utils';
 import { DomainList } from './DomainList';
 import { Insights } from './Insights';
-import { SettingsDropdown } from './SettingsDropdown';
 import { TimeRangeFilter } from './TimeRangeFilter';
 
 type AnalyticsTab = 'overview' | 'insights';
 
 type AnalyticsProps = {
-  onOpenChat: () => void;
-  onOpenSettings: () => void;
   onSelectDomain: (domain: string) => void;
-  theme: Theme;
-  onThemeChange: (theme: Theme) => void;
 };
 
-export function Analytics({ onOpenChat, onOpenSettings, onSelectDomain, theme, onThemeChange }: AnalyticsProps) {
+export function Analytics({ onSelectDomain }: AnalyticsProps) {
   const [activeTab, setActiveTab] = useState<AnalyticsTab>('overview');
   const [timeRange, setTimeRange] = useState<TimeRange>('today');
   const [summaries, setSummaries] = useState<DomainSummary[]>([]);
@@ -76,36 +70,20 @@ export function Analytics({ onOpenChat, onOpenSettings, onSelectDomain, theme, o
 
   return (
     <div className="flex h-full flex-col bg-background">
-      {/* Header */}
-      <div className="border-b border-border">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary">
-            <BarChart3 className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <div className="flex-1">
-            <h1 className="text-sm font-semibold text-foreground">Analytics</h1>
-          </div>
-          <button onClick={onOpenChat} className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-muted" title="Chat">
-            <MessageSquare className="h-5 w-5 text-muted-foreground" />
+      {/* Tab navigation */}
+      <div className="flex border-b border-border px-4">
+        {(['overview', 'insights'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={cn(
+              'flex-1 py-2 text-xs font-medium transition-colors border-b-2 capitalize',
+              activeTab === tab ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {tab}
           </button>
-          <SettingsDropdown theme={theme} onThemeChange={onThemeChange} onOpenSettings={onOpenSettings} />
-        </div>
-
-        {/* Tab navigation */}
-        <div className="flex px-4">
-          {(['overview', 'insights'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={cn(
-                'flex-1 py-2 text-xs font-medium transition-colors border-b-2 capitalize',
-                activeTab === tab ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
+        ))}
       </div>
 
       {/* Content */}
