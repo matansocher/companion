@@ -7,19 +7,22 @@ import {
   ChevronDown,
   Check,
   Cog,
+  BarChart3,
 } from "lucide-react"
 import type { Theme } from "./Settings"
 
-interface SettingsDropdownProps {
+type SettingsDropdownProps = {
   theme: Theme
   onThemeChange: (theme: Theme) => void
   onOpenSettings: () => void
+  onOpenAnalytics?: () => void
 }
 
 export function SettingsDropdown({
   theme,
   onThemeChange,
   onOpenSettings,
+  onOpenAnalytics,
 }: SettingsDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [showThemeOptions, setShowThemeOptions] = useState(false)
@@ -121,6 +124,21 @@ export function SettingsDropdown({
 
           {/* Divider */}
           <div className="my-1 border-t border-border" />
+
+          {/* Analytics Option */}
+          {onOpenAnalytics && (
+            <button
+              onClick={() => {
+                setIsOpen(false)
+                setShowThemeOptions(false)
+                onOpenAnalytics()
+              }}
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted"
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span>Analytics</span>
+            </button>
+          )}
 
           {/* Settings Page Option */}
           <button

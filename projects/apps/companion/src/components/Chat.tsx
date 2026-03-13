@@ -3,13 +3,14 @@ import { ChatMessage, type Message } from "./ChatMessage"
 import { ChatInput } from "./ChatInput"
 import { SettingsDropdown } from "./SettingsDropdown"
 import { Skeleton } from "./ui/skeleton"
-import { Bot, Loader2 } from "lucide-react"
+import { Bot, Loader2, BarChart3 } from "lucide-react"
 import type { Theme } from "./Settings"
 
-interface ChatProps {
+type ChatProps = {
   messages: Message[]
   onSendMessage: (content: string) => void
   onOpenSettings: () => void
+  onOpenAnalytics: () => void
   theme: Theme
   onThemeChange: (theme: Theme) => void
   isLoading?: boolean
@@ -19,6 +20,7 @@ export function Chat({
   messages,
   onSendMessage,
   onOpenSettings,
+  onOpenAnalytics,
   theme,
   onThemeChange,
   isLoading = false,
@@ -40,6 +42,13 @@ export function Chat({
           <h1 className="text-sm font-semibold text-foreground">Companion</h1>
           <p className="text-xs text-muted-foreground">Your page assistant</p>
         </div>
+        <button
+          onClick={onOpenAnalytics}
+          className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-muted"
+          title="Analytics"
+        >
+          <BarChart3 className="h-5 w-5 text-muted-foreground" />
+        </button>
         <SettingsDropdown
           theme={theme}
           onThemeChange={onThemeChange}

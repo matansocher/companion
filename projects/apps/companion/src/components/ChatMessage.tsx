@@ -4,7 +4,7 @@ import type { Message } from "@companion/shared"
 
 export type { Message }
 
-interface ChatMessageProps {
+type ChatMessageProps = {
   message: Message
 }
 

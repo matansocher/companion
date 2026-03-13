@@ -1,17 +1,17 @@
 import type { Message, ChatContext } from '@companion/shared'
 
-interface OpenAIMessage {
+type OpenAIMessage = {
   role: 'system' | 'user' | 'assistant'
   content: string
 }
 
-interface OpenAIChoice {
+type OpenAIChoice = {
   index: number
   message: OpenAIMessage
   finish_reason: string
 }
 
-interface OpenAIResponse {
+type OpenAIResponse = {
   id: string
   object: string
   created: number
@@ -24,7 +24,7 @@ interface OpenAIResponse {
   }
 }
 
-interface OpenAIError {
+type OpenAIError = {
   error: {
     message: string
     type: string

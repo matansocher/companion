@@ -1,11 +1,20 @@
 import { useState, useEffect } from "react"
 import { Chat } from "./components/Chat"
 import { Settings } from "./components/Settings"
+import { Analytics } from "./components/Analytics"
+import { PageDetails } from "./components/PageDetails"
+import { FocusSettings } from "./components/FocusSettings"
 import { apiClient } from "./lib/api"
 import { getPageContext } from "./lib/chrome"
-import type { Message, SettingsState, Theme } from "@companion/shared"
+import { clearAnalyticsData, getAnalyticsSettings, saveAnalyticsSettings, exportData, getFocusBudgets, saveFocusBudgets } from "./lib/analytics-storage"
+import type { Message, SettingsState, Theme, AnalyticsSettings, FocusBudget } from "@companion/shared"
 
-type View = "chat" | "settings"
+type View =
+  | { name: "analytics" }
+  | { name: "chat" }
+  | { name: "settings" }
+  | { name: "pageDetails"; domain: string }
+  | { name: "focusSettings" }
 
 function getEffectiveTheme(theme: Theme): "dark" | "light" {
   if (theme === "system") {
@@ -22,10 +31,24 @@ const defaultSettings: SettingsState = {
 }
 
 function App() {
-  const [view, setView] = useState<View>("chat")
+  const [view, setView] = useState<View>({ name: "analytics" })
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [isLoading, setIsLoading] = useState(false)
   const [settings, setSettings] = useState<SettingsState>(defaultSettings)
+  const [analyticsSettings, setAnalyticsSettings] = useState<AnalyticsSettings>({
+    blocklist: [],
+    trackingEnabled: true,
+    pinnedDomains: [],
+    customCategories: {},
+    idleTimeoutMs: 120000,
+  })
+  const [focusBudgets, setFocusBudgets] = useState<FocusBudget[]>([])
+
+  // Load analytics settings and focus budgets on mount
+  useEffect(() => {
+    getAnalyticsSettings().then(setAnalyticsSettings)
+    getFocusBudgets().then(setFocusBudgets)
+  }, [])
 
   // Apply theme setting
   useEffect(() => {
@@ -90,7 +113,8 @@ function App() {
     if (confirm("Are you sure you want to clear all data? This cannot be undone.")) {
       setMessages([])
       setSettings(defaultSettings)
-      setView("chat")
+      clearAnalyticsData()
+      setView({ name: "analytics" })
     }
   }
 
@@ -100,27 +124,88 @@ function App() {
     }
   }
 
-  if (view === "settings") {
-    return (
-      <Settings
-        onBack={() => setView("chat")}
-        onClearData={handleClearData}
-        onClearChatHistory={handleClearChatHistory}
-        messageCount={messages.length}
-      />
-    )
+  const handleSaveAnalyticsSettings = async (newSettings: AnalyticsSettings) => {
+    setAnalyticsSettings(newSettings)
+    await saveAnalyticsSettings(newSettings)
   }
 
-  return (
-    <Chat
-      messages={messages}
-      onSendMessage={handleSendMessage}
-      onOpenSettings={() => setView("settings")}
-      theme={settings.theme}
-      onThemeChange={(theme) => setSettings((prev) => ({ ...prev, theme }))}
-      isLoading={isLoading}
-    />
-  )
+  const handleClearAnalyticsData = () => {
+    if (confirm("Clear all analytics data? This cannot be undone.")) {
+      clearAnalyticsData()
+    }
+  }
+
+  const handleSaveFocusBudgets = async (budgets: FocusBudget[]) => {
+    setFocusBudgets(budgets)
+    await saveFocusBudgets(budgets)
+  }
+
+  const handleExport = async (format: "csv" | "json") => {
+    const data = await exportData(format)
+    const blob = new Blob([data], { type: format === "json" ? "application/json" : "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `browsing-analytics.${format}`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  switch (view.name) {
+    case "focusSettings":
+      return (
+        <FocusSettings
+          budgets={focusBudgets}
+          onSave={handleSaveFocusBudgets}
+          onBack={() => setView({ name: "settings" })}
+        />
+      )
+    case "settings":
+      return (
+        <Settings
+          onBack={() => setView({ name: "analytics" })}
+          onClearData={handleClearData}
+          onClearChatHistory={handleClearChatHistory}
+          messageCount={messages.length}
+          analyticsSettings={analyticsSettings}
+          onSaveAnalyticsSettings={handleSaveAnalyticsSettings}
+          onClearAnalyticsData={handleClearAnalyticsData}
+          onExport={handleExport}
+          onOpenFocusSettings={() => setView({ name: "focusSettings" })}
+          focusBudgetCount={focusBudgets.length}
+        />
+      )
+    case "chat":
+      return (
+        <Chat
+          messages={messages}
+          onSendMessage={handleSendMessage}
+          onOpenSettings={() => setView({ name: "settings" })}
+          onOpenAnalytics={() => setView({ name: "analytics" })}
+          theme={settings.theme}
+          onThemeChange={(theme) => setSettings((prev) => ({ ...prev, theme }))}
+          isLoading={isLoading}
+        />
+      )
+    case "pageDetails":
+      return (
+        <PageDetails
+          domain={view.domain}
+          onBack={() => setView({ name: "analytics" })}
+        />
+      )
+    case "analytics":
+    default:
+      return (
+        <Analytics
+          onOpenChat={() => setView({ name: "chat" })}
+          onOpenSettings={() => setView({ name: "settings" })}
+          onSelectDomain={(domain) => setView({ name: "pageDetails", domain })}
+          theme={settings.theme}
+          onThemeChange={(theme) => setSettings((prev) => ({ ...prev, theme }))}
+        />
+      )
+  }
 }
 
 export default App

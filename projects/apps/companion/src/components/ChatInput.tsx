@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react"
 import { Send } from "lucide-react"
 import { cn } from "../lib/utils"
 
-interface ChatInputProps {
+type ChatInputProps = {
   onSend: (message: string) => void
   disabled?: boolean
   placeholder?: string

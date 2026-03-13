@@ -1,5 +1,5 @@
 // Chat message types
-export interface Message {
+export type Message = {
   id: string
   role: "user" | "assistant"
   content: string
@@ -9,32 +9,72 @@ export interface Message {
 // Theme and settings types
 export type Theme = "dark" | "light" | "system"
 
-export interface SettingsState {
+export type SettingsState = {
   theme: Theme
 }
 
 // API request/response types
-export interface ChatContext {
+export type ChatContext = {
   pageUrl?: string
   pageTitle?: string
   pageContent?: string
 }
 
-export interface SendMessageRequest {
+export type SendMessageRequest = {
   content: string
   context?: ChatContext
 }
 
-export interface SendMessageResponse {
+export type SendMessageResponse = {
   message: Message
 }
 
-export interface GetMessagesResponse {
+export type GetMessagesResponse = {
   messages: Message[]
 }
 
-export interface ApiResponse<T> {
+export type ApiResponse<T> = {
   success: boolean
   data?: T
   error?: string
 }
+
+// Analytics types
+export type PageVisit = {
+  id: string
+  url: string
+  domain: string
+  title: string
+  startTime: number    // epoch ms
+  endTime: number      // epoch ms
+  duration: number     // ms (precomputed)
+}
+
+export type DomainCategory =
+  | 'Social Media' | 'Work' | 'News' | 'Entertainment'
+  | 'Shopping' | 'Development' | 'Other'
+
+export type DomainSummary = {
+  domain: string
+  category: DomainCategory
+  totalDuration: number
+  visitCount: number
+}
+
+export type TimeRange = 'today' | '7days' | '30days' | 'all'
+
+export type AnalyticsSettings = {
+  blocklist: string[]
+  trackingEnabled: boolean
+  pinnedDomains: string[]
+  customCategories: Record<string, DomainCategory>
+  idleTimeoutMs: number // ms of inactivity before pausing timer (0 = disabled)
+}
+
+// Focus mode types
+export type FocusBudget = {
+  domain: string
+  dailyLimitMs: number // daily budget in milliseconds
+}
+
+export type BudgetStatus = 'ok' | 'warning' | 'exceeded'

@@ -1,6 +1,6 @@
 import type { ChatContext } from '@companion/shared'
 
-interface PageContentResponse {
+type PageContentResponse = {
   pageUrl?: string
   pageTitle?: string
   pageContent?: string

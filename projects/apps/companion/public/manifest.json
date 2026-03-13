@@ -3,7 +3,7 @@
   "name": "Companion",
   "version": "1.0.0",
   "description": "Your companion side panel extension",
-  "permissions": ["sidePanel", "activeTab", "scripting", "tabs"],
+  "permissions": ["sidePanel", "activeTab", "scripting", "tabs", "storage", "alarms", "webNavigation", "idle"],
   "host_permissions": ["<all_urls>"],
   "side_panel": {
     "default_path": "index.html"
