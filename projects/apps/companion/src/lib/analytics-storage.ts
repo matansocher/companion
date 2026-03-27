@@ -1,8 +1,9 @@
-import type { AnalyticsSettings, BudgetStatus, DomainCategory, DomainSummary, FocusBudget, PageVisit, TimeRange } from '@companion/shared';
+import type { AnalyticsSettings, BudgetStatus, CalendarEvent, DomainCategory, DomainSummary, FocusBudget, PageVisit, TimeRange } from '@companion/shared';
 
 const VISITS_KEY = 'analytics_visits';
 const SETTINGS_KEY = 'analytics_settings';
 const BUDGETS_KEY = 'analytics_focus_budgets';
+const CALENDAR_EVENTS_KEY = 'calendar_events';
 
 const defaultSettings: AnalyticsSettings = {
   blocklist: [],
@@ -459,6 +460,17 @@ export async function getTabCounts(timeRange: TimeRange): Promise<TabCountEntry[
   const entries: TabCountEntry[] = result[TAB_COUNTS_KEY] || [];
   const start = getTimeRangeStart(timeRange);
   return entries.filter((e) => e.timestamp >= start).sort((a, b) => a.timestamp - b.timestamp);
+}
+
+// Calendar event helpers
+
+export async function getCalendarEvents(): Promise<CalendarEvent[]> {
+  const result = await chrome.storage.local.get(CALENDAR_EVENTS_KEY);
+  return result[CALENDAR_EVENTS_KEY] || [];
+}
+
+export async function saveCalendarEvents(events: CalendarEvent[]): Promise<void> {
+  await chrome.storage.local.set({ [CALENDAR_EVENTS_KEY]: events });
 }
 
 export async function exportData(format: 'csv' | 'json'): Promise<string> {

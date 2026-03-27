@@ -118,3 +118,13 @@ export type WhatsAppMessage = {
   isOwn: boolean;
   senderName: string;
 };
+
+// Calendar types
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  description: string;
+};

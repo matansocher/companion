@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { AnalyticsSettings, FocusBudget, Message, SettingsState, Theme } from '@companion/shared';
+import type { AnalyticsSettings, CalendarEvent, FocusBudget, Message, SettingsState, Theme } from '@companion/shared';
 import { Analytics } from './components/Analytics';
 import { AppHeader } from './components/AppHeader';
 import { BottomTabBar, type TabName } from './components/BottomTabBar';
@@ -9,13 +9,15 @@ import { PageDetails } from './components/PageDetails';
 import { Settings } from './components/Settings';
 import { Telegram } from './components/Telegram';
 import { WhatsApp } from './components/WhatsApp';
+import { Calendar } from './components/Calendar';
+import { CalendarEventForm } from './components/CalendarEventForm';
 import { GeoGuesser } from './components/GeoGuesser';
-import { clearAnalyticsData, exportData, getAnalyticsSettings, getFocusBudgets, saveAnalyticsSettings, saveFocusBudgets } from './lib/analytics-storage';
+import { clearAnalyticsData, exportData, getAnalyticsSettings, getCalendarEvents, getFocusBudgets, saveAnalyticsSettings, saveCalendarEvents, saveFocusBudgets } from './lib/analytics-storage';
 import { apiClient } from './lib/api';
 import { getPageContext } from './lib/chrome';
 import { useUserProfile } from './lib/use-user-profile';
 
-type SubView = { name: 'none' } | { name: 'settings' } | { name: 'focusSettings' } | { name: 'pageDetails'; domain: string };
+type SubView = { name: 'none' } | { name: 'settings' } | { name: 'focusSettings' } | { name: 'pageDetails'; domain: string } | { name: 'calendarNewEvent' };
 
 function getEffectiveTheme(theme: Theme): 'dark' | 'light' {
   if (theme === 'system') {
@@ -44,11 +46,13 @@ function App() {
     idleTimeoutMs: 120000,
   });
   const [focusBudgets, setFocusBudgets] = useState<FocusBudget[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const profile = useUserProfile();
 
   useEffect(() => {
     getAnalyticsSettings().then(setAnalyticsSettings);
     getFocusBudgets().then(setFocusBudgets);
+    getCalendarEvents().then(setCalendarEvents);
   }, []);
 
   useEffect(() => {
@@ -123,6 +127,19 @@ function App() {
     await saveFocusBudgets(budgets);
   };
 
+  const handleSaveCalendarEvent = async (event: CalendarEvent) => {
+    const updated = [...calendarEvents, event];
+    setCalendarEvents(updated);
+    await saveCalendarEvents(updated);
+    setSubView({ name: 'none' });
+  };
+
+  const handleDeleteCalendarEvent = async (id: string) => {
+    const updated = calendarEvents.filter((e) => e.id !== id);
+    setCalendarEvents(updated);
+    await saveCalendarEvents(updated);
+  };
+
   const handleExport = async (format: 'csv' | 'json') => {
     const data = await exportData(format);
     const blob = new Blob([data], { type: format === 'json' ? 'application/json' : 'text/csv' });
@@ -161,6 +178,10 @@ function App() {
     );
   }
 
+  if (subView.name === 'calendarNewEvent') {
+    return <CalendarEventForm onSave={handleSaveCalendarEvent} onBack={() => setSubView({ name: 'none' })} />;
+  }
+
   if (subView.name === 'pageDetails') {
     return <PageDetails domain={subView.domain} onBack={() => setSubView({ name: 'none' })} />;
   }
@@ -176,6 +197,7 @@ function App() {
         {activeTab === 'telegram' && <Telegram />}
         {activeTab === 'whatsapp' && <WhatsApp />}
         {activeTab === 'geoguesser' && <GeoGuesser />}
+        {activeTab === 'calendar' && <Calendar events={calendarEvents} onNewEvent={() => setSubView({ name: 'calendarNewEvent' })} onDelete={handleDeleteCalendarEvent} />}
       </div>
 
       <BottomTabBar active={activeTab} onChange={handleTabChange} />
