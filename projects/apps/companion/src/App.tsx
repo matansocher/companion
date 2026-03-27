@@ -7,6 +7,7 @@ import { Chat } from './components/Chat';
 import { FocusSettings } from './components/FocusSettings';
 import { PageDetails } from './components/PageDetails';
 import { Settings } from './components/Settings';
+import { Gmail } from './components/Gmail';
 import { Telegram } from './components/Telegram';
 import { WhatsApp } from './components/WhatsApp';
 import { GeoGuesser } from './components/GeoGuesser';
@@ -175,6 +176,7 @@ function App() {
         {activeTab === 'chat' && <Chat messages={messages} onSendMessage={handleSendMessage} isLoading={isLoading} />}
         {activeTab === 'telegram' && <Telegram />}
         {activeTab === 'whatsapp' && <WhatsApp />}
+        {activeTab === 'gmail' && <Gmail />}
         {activeTab === 'geoguesser' && <GeoGuesser />}
       </div>
 

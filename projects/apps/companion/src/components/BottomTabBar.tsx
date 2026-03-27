@@ -1,13 +1,14 @@
-import { BarChart3, MessageCircle, MessageSquare, Send, MapPin } from 'lucide-react';
+import { BarChart3, Mail, MessageCircle, MessageSquare, Send, MapPin } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-export type TabName = 'analytics' | 'chat' | 'telegram' | 'whatsapp' | 'geoguesser';
+export type TabName = 'analytics' | 'chat' | 'telegram' | 'whatsapp' | 'gmail' | 'geoguesser';
 
 const tabs: { name: TabName; label: string; icon: typeof BarChart3 }[] = [
   { name: 'analytics', label: 'Usage', icon: BarChart3 },
   { name: 'chat', label: 'Chat', icon: MessageSquare },
   { name: 'telegram', label: 'Telegram', icon: Send },
   { name: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+  { name: 'gmail', label: 'Gmail', icon: Mail },
   { name: 'geoguesser', label: 'GeoGuesser', icon: MapPin },
 ];
 

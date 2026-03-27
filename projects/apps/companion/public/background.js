@@ -314,6 +314,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.type === 'GET_GMAIL_EMAILS') {
+    getGmailEmails()
+      .then((result) => sendResponse(result))
+      .catch((error) => {
+        console.error('[Background] Error getting Gmail emails:', error);
+        sendResponse({ error: error.message, emails: [] });
+      });
+    return true;
+  }
+
+  if (request.type === 'GET_GMAIL_EMAIL_CONTENT') {
+    getGmailEmailContent(request.emailId)
+      .then((result) => sendResponse(result))
+      .catch((error) => {
+        console.error('[Background] Error getting Gmail email content:', error);
+        sendResponse({ error: error.message, content: null });
+      });
+    return true;
+  }
+
   if (request.type === 'GET_USER_PROFILE') {
     chrome.identity.getProfileUserInfo({ accountStatus: 'ANY' }, (userInfo) => {
       sendResponse({ email: userInfo?.email || '', id: userInfo?.id || '' });
@@ -969,6 +989,257 @@ function extractWhatsAppMessagesFromDB(chatJid) {
       }
     };
   });
+}
+
+// ============================================================
+// Gmail: Extract emails from mail.google.com
+// ============================================================
+
+async function getGmailEmails() {
+  const tabs = await chrome.tabs.query({ url: '*://mail.google.com/*' });
+  if (tabs.length === 0) {
+    return { error: 'no_tab', emails: [] };
+  }
+
+  const tab = tabs[0];
+
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: extractGmailEmails,
+  });
+
+  const data = results?.[0]?.result;
+  if (!data || data.error) {
+    return { error: data?.error || 'extraction_failed', emails: [] };
+  }
+
+  return { emails: data.emails };
+}
+
+// Runs in the context of the Gmail page
+function extractGmailEmails() {
+  try {
+    const emails = [];
+
+    // Gmail email rows: tr.zA (read) and tr.zE (unread)
+    const mainArea = document.querySelector('div[role="main"]');
+    if (!mainArea) {
+      return { error: 'no_main_area', emails: [] };
+    }
+
+    let rows = mainArea.querySelectorAll('tr.zA, tr.zE');
+
+    // Fallback: try table rows within the main area
+    if (rows.length === 0) {
+      rows = mainArea.querySelectorAll('table tbody tr');
+    }
+
+    if (rows.length === 0) {
+      return { error: 'no_email_rows', emails: [] };
+    }
+
+    rows.forEach((row) => {
+      try {
+        // Thread ID
+        const emailId = row.dataset.legacyThreadId || '';
+        if (!emailId) {
+          const threadEl = row.querySelector('[data-thread-id]');
+          if (!threadEl) return;
+        }
+        const finalEmailId = emailId || row.querySelector('[data-thread-id]')?.getAttribute('data-thread-id') || '';
+        if (!finalEmailId) return;
+
+        // Sender
+        const senderEl = row.querySelector('span.yP, span.zF, span.bA4 span[email]');
+        const sender = senderEl?.getAttribute('name') || senderEl?.textContent?.trim() || '';
+        const senderEmail = senderEl?.getAttribute('email') || '';
+
+        // Subject
+        const subjectEl = row.querySelector('span.bog span, span.bqe, [data-thread-id] span');
+        const subject = subjectEl?.textContent?.trim() || '';
+
+        // Snippet
+        const snippetEl = row.querySelector('span.y2');
+        let snippet = snippetEl?.textContent?.trim() || '';
+        // Strip leading " - " from snippet
+        snippet = snippet.replace(/^\s*[-–—]\s*/, '');
+
+        // Date
+        const dateTd = row.querySelector('td.xW');
+        const dateSpan = dateTd?.querySelector('span') || row.querySelector('td:last-child span[title]');
+        const date = dateSpan?.getAttribute('title') || dateSpan?.textContent?.trim() || '';
+
+        // Unread
+        const isUnread = row.classList.contains('zE');
+
+        // Starred
+        const starEl = row.querySelector('td.apU img, td.apU span, [aria-label*="Starred"], [aria-label*="starred"]');
+        const isStarred = starEl ? (starEl.getAttribute('aria-label') || '').toLowerCase().includes('starred') : false;
+
+        // Attachment
+        const hasAttachment = !!row.querySelector('div.yf, span.brc, [aria-label*="attachment"], [aria-label*="Attachment"]');
+
+        if (sender || subject) {
+          emails.push({
+            emailId: finalEmailId,
+            sender,
+            senderEmail,
+            subject,
+            snippet,
+            date,
+            isUnread,
+            isStarred,
+            hasAttachment,
+          });
+        }
+      } catch {
+        // Skip this row on error
+      }
+    });
+
+    return { emails };
+  } catch (error) {
+    return { error: error.message, emails: [] };
+  }
+}
+
+async function getGmailEmailContent(emailId) {
+  const tabs = await chrome.tabs.query({ url: '*://mail.google.com/*' });
+  if (tabs.length === 0) {
+    return { error: 'no_tab', content: null };
+  }
+
+  const tab = tabs[0];
+
+  // Navigate Gmail to the thread
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: (threadId) => {
+      window.location.hash = '#inbox/' + threadId;
+    },
+    args: [emailId],
+  });
+
+  // Poll for rendered content (every 200ms, up to 3s)
+  const maxAttempts = 15;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: extractGmailEmailContent,
+    });
+
+    const data = results?.[0]?.result;
+    if (data && !data.error && data.content && data.content.bodyText) {
+      return data;
+    }
+    // If we got a definitive error (not just "not ready"), stop polling
+    if (data?.error && data.error !== 'not_rendered') {
+      return data;
+    }
+  }
+
+  // Final attempt
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: extractGmailEmailContent,
+  });
+
+  const data = results?.[0]?.result;
+  if (data && !data.error) {
+    return data;
+  }
+
+  return { error: 'timeout', content: null };
+}
+
+// Runs in the context of the Gmail page — extracts opened email content
+function extractGmailEmailContent() {
+  try {
+    const mainArea = document.querySelector('div[role="main"]');
+    if (!mainArea) {
+      return { error: 'no_main_area', content: null };
+    }
+
+    // Check if an email thread is open by looking for subject heading
+    const subjectEl = mainArea.querySelector('h2.hP') || mainArea.querySelector('h2[data-thread-perm-id]');
+    if (!subjectEl) {
+      return { error: 'not_rendered', content: null };
+    }
+
+    const subject = subjectEl.textContent?.trim() || '';
+
+    // Find the most recent message in the thread (last expanded message)
+    const messages = mainArea.querySelectorAll('div.adn, div.gs');
+    const lastMessage = messages.length > 0 ? messages[messages.length - 1] : mainArea;
+
+    // From
+    const fromEl = lastMessage.querySelector('span.gD[email], span[email]');
+    const fromName = fromEl?.getAttribute('name') || fromEl?.textContent?.trim() || '';
+    const fromEmail = fromEl?.getAttribute('email') || '';
+    const from = fromEmail ? (fromName ? fromName + ' <' + fromEmail + '>' : fromEmail) : fromName;
+
+    // To
+    const toContainer = lastMessage.querySelector('span.g2');
+    let to = '';
+    if (toContainer) {
+      const toSpans = toContainer.querySelectorAll('span[email]');
+      to = Array.from(toSpans).map((s) => {
+        const name = s.getAttribute('name') || s.textContent?.trim() || '';
+        const email = s.getAttribute('email') || '';
+        return name && email ? name + ' <' + email + '>' : email || name;
+      }).join(', ');
+    }
+    if (!to) {
+      // Fallback: look for "to" text in header area
+      const headerRows = lastMessage.querySelectorAll('tr.acZ, span.hb');
+      headerRows.forEach((row) => {
+        const text = row.textContent || '';
+        if (text.toLowerCase().startsWith('to')) {
+          to = text.replace(/^to:?\s*/i, '').trim();
+        }
+      });
+    }
+
+    // CC
+    let cc = '';
+    const ccContainer = lastMessage.querySelector('span.g2 + span.g2');
+    if (ccContainer) {
+      const ccSpans = ccContainer.querySelectorAll('span[email]');
+      cc = Array.from(ccSpans).map((s) => {
+        const name = s.getAttribute('name') || s.textContent?.trim() || '';
+        const email = s.getAttribute('email') || '';
+        return name && email ? name + ' <' + email + '>' : email || name;
+      }).join(', ');
+    }
+
+    // Date
+    const dateEl = lastMessage.querySelector('span.g3') || lastMessage.querySelector('span[title]');
+    const date = dateEl?.getAttribute('title') || dateEl?.textContent?.trim() || '';
+
+    // Body
+    const bodyEl = lastMessage.querySelector('div.a3s.aiL') || lastMessage.querySelector('div.a3s') || lastMessage.querySelector('div[dir="ltr"]');
+    const bodyText = bodyEl?.textContent?.trim() || '';
+
+    // Get emailId from URL hash
+    const hash = window.location.hash || '';
+    const emailId = hash.replace(/^#[^/]*\//, '');
+
+    return {
+      content: {
+        emailId,
+        subject,
+        from,
+        to,
+        cc,
+        date,
+        bodyText,
+      },
+    };
+  } catch (error) {
+    return { error: error.message, content: null };
+  }
 }
 
 // This function runs in the context of the web page
