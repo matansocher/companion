@@ -314,6 +314,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.type === 'GET_CALENDAR_EVENTS') {
+    getCalendarEvents()
+      .then((result) => sendResponse(result))
+      .catch((error) => {
+        console.error('[Background] Error getting calendar events:', error);
+        sendResponse({ error: error.message, events: [] });
+      });
+    return true;
+  }
+
   if (request.type === 'GET_USER_PROFILE') {
     chrome.identity.getProfileUserInfo({ accountStatus: 'ANY' }, (userInfo) => {
       sendResponse({ email: userInfo?.email || '', id: userInfo?.id || '' });
@@ -1006,5 +1016,209 @@ function extractPageContent() {
   } catch (error) {
     console.error('[Page Script] Error extracting content:', error);
     return '';
+  }
+}
+
+// ─── Google Calendar ─────────────────────────────────────────
+
+async function getCalendarEvents() {
+  const tabs = await chrome.tabs.query({ url: '*://calendar.google.com/*' });
+
+  if (tabs.length === 0) {
+    return { error: 'no_tab', events: [] };
+  }
+
+  const tab = tabs[0];
+
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: extractCalendarEvents,
+  });
+
+  const data = results?.[0]?.result;
+  if (!data || data.error) {
+    return { error: data?.error || 'extraction_failed', events: [] };
+  }
+
+  return { events: data.events };
+}
+
+// Runs in the context of the Google Calendar page
+function extractCalendarEvents() {
+  try {
+    function rgbToHex(rgb) {
+      if (!rgb) return '#4285f4';
+      const match = rgb.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+      if (!match) return '#4285f4';
+      const r = parseInt(match[1]).toString(16).padStart(2, '0');
+      const g = parseInt(match[2]).toString(16).padStart(2, '0');
+      const b = parseInt(match[3]).toString(16).padStart(2, '0');
+      return `#${r}${g}${b}`;
+    }
+
+    function parseDateLabel(dateStr) {
+      // Try to parse a date string like "Friday, March 27" into YYYY-MM-DD
+      try {
+        const now = new Date();
+        const year = now.getFullYear();
+        const parsed = new Date(`${dateStr}, ${year}`);
+        if (!isNaN(parsed.getTime())) {
+          // If the parsed date is more than 2 months in the past, try next year
+          if (parsed < new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000)) {
+            parsed.setFullYear(year + 1);
+          }
+          return parsed.toISOString().split('T')[0];
+        }
+      } catch {}
+      return new Date().toISOString().split('T')[0];
+    }
+
+    function parseAriaLabel(ariaLabel) {
+      // Common formats:
+      // "Title, March 27, 10:00 AM to 11:00 AM"
+      // "Title, Friday, March 27, 10:00 AM to 11:00 AM, Location"
+      // "Title, March 27" (all-day)
+      const result = {
+        title: '',
+        startTime: '',
+        endTime: '',
+        dateLabel: '',
+        location: '',
+        isAllDay: false,
+      };
+
+      if (!ariaLabel) return result;
+
+      // Try to match time range pattern: "HH:MM AM/PM to HH:MM AM/PM"
+      const timeMatch = ariaLabel.match(
+        /(\d{1,2}:\d{2}\s*[APap][Mm])\s+to\s+(\d{1,2}:\d{2}\s*[APap][Mm])/
+      );
+      // Also try format without space before AM/PM and with unicode narrow no-break space
+      const timeMatch2 = !timeMatch
+        ? ariaLabel.match(
+            /(\d{1,2}:\d{2}\s*[APap][Mm])\s*[\u2013\u2014–-]\s*(\d{1,2}:\d{2}\s*[APap][Mm])/
+          )
+        : null;
+      const tm = timeMatch || timeMatch2;
+
+      if (tm) {
+        result.startTime = tm[1].trim();
+        result.endTime = tm[2].trim();
+      } else {
+        result.isAllDay = true;
+      }
+
+      // Try to extract date: look for month name patterns
+      const months = 'January|February|March|April|May|June|July|August|September|October|November|December';
+      const dateMatch = ariaLabel.match(
+        new RegExp(`(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\\s*)?((?:${months})\\s+\\d{1,2})`)
+      );
+      if (dateMatch) {
+        result.dateLabel = parseDateLabel(dateMatch[1]);
+      } else {
+        result.dateLabel = new Date().toISOString().split('T')[0];
+      }
+
+      // Title: everything before the first date or time pattern
+      // Find the position of the date match in the string
+      if (dateMatch) {
+        const dateIdx = ariaLabel.indexOf(dateMatch[0]);
+        if (dateIdx > 0) {
+          result.title = ariaLabel.substring(0, dateIdx).replace(/,\s*$/, '').trim();
+        }
+      }
+
+      // If no title extracted from date position, try before time
+      if (!result.title && tm) {
+        const timeIdx = ariaLabel.indexOf(tm[0]);
+        if (timeIdx > 0) {
+          result.title = ariaLabel.substring(0, timeIdx).replace(/,\s*$/, '').trim();
+        }
+      }
+
+      // Fallback: first segment before comma
+      if (!result.title) {
+        const commaIdx = ariaLabel.indexOf(',');
+        result.title = commaIdx > 0 ? ariaLabel.substring(0, commaIdx).trim() : ariaLabel.trim();
+      }
+
+      // Location: anything after the time range (or after the date for all-day events)
+      if (tm) {
+        const afterTime = ariaLabel.substring(ariaLabel.indexOf(tm[0]) + tm[0].length);
+        const locPart = afterTime.replace(/^[,\s]+/, '').trim();
+        if (locPart && locPart.length > 0) {
+          result.location = locPart.replace(/,\s*$/, '');
+        }
+      }
+
+      return result;
+    }
+
+    const events = [];
+    const seen = new Set();
+
+    // Query all event elements with data-eventid
+    const eventEls = document.querySelectorAll('[data-eventid]');
+
+    eventEls.forEach((el) => {
+      const eventId = el.getAttribute('data-eventid') || '';
+      if (!eventId || seen.has(eventId)) return;
+      seen.add(eventId);
+
+      const ariaLabel = el.getAttribute('aria-label') || '';
+      const parsed = parseAriaLabel(ariaLabel);
+
+      // Get color from the event chip
+      let color = '#4285f4';
+      // Try finding a colored element inside the chip
+      const colorEl =
+        el.querySelector('[style*="background-color"]') ||
+        el.querySelector('[style*="border-color"]') ||
+        el;
+      try {
+        const bg = getComputedStyle(colorEl).backgroundColor;
+        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+          color = rgbToHex(bg);
+        } else {
+          // Try border-left-color or border-color
+          const bc = getComputedStyle(colorEl).borderLeftColor || getComputedStyle(el).borderLeftColor;
+          if (bc && bc !== 'rgba(0, 0, 0, 0)' && bc !== 'transparent') {
+            color = rgbToHex(bc);
+          }
+        }
+      } catch {}
+
+      // Detect all-day: check if the element is in an all-day area
+      const isAllDay =
+        parsed.isAllDay ||
+        !!el.closest('[data-allday]') ||
+        !!el.closest('[class*="allDay"]');
+
+      if (parsed.title) {
+        events.push({
+          eventId,
+          title: parsed.title,
+          startTime: parsed.startTime,
+          endTime: parsed.endTime,
+          dateLabel: parsed.dateLabel,
+          location: parsed.location,
+          color,
+          calendarName: '',
+          isAllDay,
+        });
+      }
+    });
+
+    // Sort by date then time
+    events.sort((a, b) => {
+      if (a.dateLabel !== b.dateLabel) return a.dateLabel.localeCompare(b.dateLabel);
+      if (a.isAllDay && !b.isAllDay) return -1;
+      if (!a.isAllDay && b.isAllDay) return 1;
+      return a.startTime.localeCompare(b.startTime);
+    });
+
+    return { events };
+  } catch (e) {
+    return { error: e.message || 'extraction_error', events: [] };
   }
 }
