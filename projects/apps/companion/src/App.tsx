@@ -10,6 +10,7 @@ import { Settings } from './components/Settings';
 import { Telegram } from './components/Telegram';
 import { WhatsApp } from './components/WhatsApp';
 import { GeoGuesser } from './components/GeoGuesser';
+import { Gmail } from './components/Gmail';
 import { clearAnalyticsData, exportData, getAnalyticsSettings, getFocusBudgets, saveAnalyticsSettings, saveFocusBudgets } from './lib/analytics-storage';
 import { apiClient } from './lib/api';
 import { getPageContext } from './lib/chrome';
@@ -175,6 +176,7 @@ function App() {
         {activeTab === 'chat' && <Chat messages={messages} onSendMessage={handleSendMessage} isLoading={isLoading} />}
         {activeTab === 'telegram' && <Telegram />}
         {activeTab === 'whatsapp' && <WhatsApp />}
+        {activeTab === 'gmail' && <Gmail />}
         {activeTab === 'geoguesser' && <GeoGuesser />}
       </div>
 

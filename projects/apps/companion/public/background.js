@@ -314,6 +314,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.type === 'CHECK_GMAIL_TAB') {
+    chrome.tabs.query({ url: '*://mail.google.com/*' }).then((tabs) => {
+      sendResponse({ available: tabs.length > 0 });
+    });
+    return true;
+  }
+
+  if (request.type === 'GMAIL_COMPOSE') {
+    composeGmail(request.data)
+      .then((result) => sendResponse(result))
+      .catch((error) => {
+        console.error('[Background] Error composing Gmail:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
   if (request.type === 'GET_USER_PROFILE') {
     chrome.identity.getProfileUserInfo({ accountStatus: 'ANY' }, (userInfo) => {
       sendResponse({ email: userInfo?.email || '', id: userInfo?.id || '' });
@@ -381,6 +398,32 @@ async function getPageContent() {
       error: error.message
     };
   }
+}
+
+// ============================================================
+// Gmail: Compose email via Gmail's compose URL
+// ============================================================
+
+async function composeGmail({ to, subject, body }) {
+  const tabs = await chrome.tabs.query({ url: '*://mail.google.com/*' });
+  if (tabs.length === 0) {
+    return { success: false, error: 'no_tab' };
+  }
+
+  const tab = tabs[0];
+
+  const params = new URLSearchParams();
+  params.set('view', 'cm');
+  params.set('fs', '1');
+  params.set('to', to);
+  params.set('su', subject);
+  params.set('body', body);
+
+  const composeUrl = `https://mail.google.com/mail/?${params.toString()}`;
+
+  await chrome.tabs.update(tab.id, { url: composeUrl, active: true });
+
+  return { success: true };
 }
 
 // ============================================================

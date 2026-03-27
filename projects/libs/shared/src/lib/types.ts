@@ -118,3 +118,15 @@ export type WhatsAppMessage = {
   isOwn: boolean;
   senderName: string;
 };
+
+// Gmail types
+export type GmailComposeData = {
+  to: string;
+  subject: string;
+  body: string;
+};
+
+export type GmailSendResult = {
+  success: boolean;
+  error?: string;
+};
