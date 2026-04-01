@@ -305,7 +305,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'GET_WHATSAPP_MESSAGES') {
-    getWhatsAppMessages(request.chatId)
+    console.log('[Background] GET_WHATSAPP_MESSAGES chatId:', request.chatId, 'chatName:', request.chatName);
+    getWhatsAppMessages(request.chatId, request.chatName)
       .then((result) => sendResponse(result))
       .catch((error) => {
         console.error('[Background] Error getting WhatsApp messages:', error);
@@ -851,7 +852,7 @@ function extractWhatsAppChatsFromDB() {
   });
 }
 
-async function getWhatsAppMessages(chatId) {
+async function getWhatsAppMessages(chatId, chatName) {
   const tabs = await chrome.tabs.query({ url: '*://web.whatsapp.com/*' });
   if (tabs.length === 0) {
     return { error: 'no_tab', messages: [] };
@@ -859,10 +860,21 @@ async function getWhatsAppMessages(chatId) {
 
   const tab = tabs[0];
 
+  // Step 1: Open search, type chat name, and select the result
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: openWhatsAppChat,
+    args: [chatId, chatName],
+  });
+
+  // Step 2: Wait for search + navigation + messages to render
+  // openWhatsAppChat takes ~1.3s internally, plus we need time for messages to load
+  await new Promise((r) => setTimeout(r, 3000));
+
+  // Step 3: Scrape visible messages from the DOM
   const results = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
-    func: extractWhatsAppMessagesFromDB,
-    args: [chatId],
+    func: extractWhatsAppMessagesFromDOM,
   });
 
   const data = results?.[0]?.result;
@@ -873,102 +885,189 @@ async function getWhatsAppMessages(chatId) {
   return { messages: data.messages };
 }
 
-// Reads messages from WhatsApp's IndexedDB filtered by chat JID
-function extractWhatsAppMessagesFromDB(chatJid) {
+// Opens a WhatsApp chat by typing the name in the search bar and selecting it
+function openWhatsAppChat(chatId, chatName) {
   return new Promise((resolve) => {
-    const req = indexedDB.open('model-storage');
-    req.onerror = () => resolve({ error: 'db_open_failed', messages: [] });
-    req.onsuccess = () => {
-      try {
-        const db = req.result;
+    try {
+      // Find and click the search button/bar to open search
+      const searchBox = document.querySelector('[role="textbox"][data-tab="3"]')
+        || document.querySelector('[contenteditable="true"][data-tab="3"]');
 
-        // Also load contacts for sender name resolution
-        const contactMap = {};
-        const contactTx = db.transaction('contact', 'readonly');
-        const contactStore = contactTx.objectStore('contact');
-        const contactReq = contactStore.getAll();
-        contactReq.onsuccess = () => {
-          (contactReq.result || []).forEach(c => {
-            if (c.id) contactMap[c.id] = c.name || c.pushname || c.shortName || '';
-          });
-
-          // Now read messages
-          const tx = db.transaction('message', 'readonly');
-          const store = tx.objectStore('message');
-          const messages = [];
-          const cursor = store.openCursor(null, 'prev');
-
-          cursor.onsuccess = () => {
-            const result = cursor.result;
-            if (!result || messages.length >= 50) {
-              db.close();
-              // Sort ascending (we collected in reverse)
-              messages.reverse();
-              resolve({ messages });
-              return;
-            }
-
-            const msg = result.value;
-            // Check if this message belongs to the target chat
-            const msgId = msg.id || '';
-            const belongsToChat = msgId.includes('_' + chatJid + '_') || msgId.startsWith('true_' + chatJid) || msgId.startsWith('false_' + chatJid);
-
-            if (belongsToChat && msg.type !== 'revoked' && msg.type !== 'e2e_notification' && msg.type !== 'notification_template') {
-              const isOwn = msgId.startsWith('true_');
-
-              let text = '';
-              if (msg.type === 'chat' || msg.type === 'text') {
-                text = msg.body || '';
-              } else if (msg.type === 'image' || msg.type === 'video' || msg.type === 'gif') {
-                text = msg.caption || '[' + (msg.type === 'image' ? 'Photo' : 'Video') + ']';
-              } else if (msg.type === 'ptt' || msg.type === 'audio') {
-                text = '[Voice message]';
-              } else if (msg.type === 'document') {
-                text = '[File] ' + (msg.filename || '');
-              } else if (msg.type === 'sticker') {
-                text = '[Sticker]';
-              } else if (msg.type === 'vcard' || msg.type === 'multi_vcard') {
-                text = '[Contact]';
-              } else if (msg.type === 'location' || msg.type === 'liveLocation') {
-                text = '[Location]';
-              } else if (msg.type === 'poll_creation') {
-                text = '[Poll]';
-              } else if (msg.type === 'notification') {
-                result.continue();
-                return;
-              } else {
-                text = msg.body || '[' + msg.type + ']';
-              }
-
-              // Time
-              const d = new Date(msg.t * 1000);
-              const now = new Date();
-              let time;
-              if (d.toDateString() === now.toDateString()) {
-                time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              } else {
-                time = d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              }
-
-              // Sender name for group chats
-              let senderName = '';
-              if (!isOwn && msg.from) {
-                senderName = contactMap[msg.from] || msg.from.replace(/@.*/, '');
-              }
-
-              messages.push({ id: msgId, text, time, isOwn, senderName });
-            }
-
-            result.continue();
-          };
-          cursor.onerror = () => { db.close(); resolve({ error: 'cursor_error', messages: [] }); };
-        };
-        contactReq.onerror = () => { db.close(); resolve({ error: 'contact_read_failed', messages: [] }); };
-      } catch (e) {
-        resolve({ error: e.message, messages: [] });
+      if (!searchBox) {
+        // Try clicking the search icon to reveal the search box
+        const searchBtn = document.querySelector('[data-icon="search"]')
+          || document.querySelector('button[aria-label="Search"]')
+          || document.querySelector('[title="Search"]');
+        if (searchBtn) searchBtn.click();
       }
-    };
+
+      setTimeout(() => {
+        const input = document.querySelector('[role="textbox"][data-tab="3"]')
+          || document.querySelector('[contenteditable="true"][data-tab="3"]');
+
+        if (!input) { resolve(); return; }
+
+        // Focus and clear existing text
+        input.focus();
+        document.execCommand('selectAll', false);
+        document.execCommand('delete', false);
+
+        // Type the search query
+        const query = chatName || chatId.replace(/@.*/, '');
+        document.execCommand('insertText', false, query);
+
+        // Wait for search results to appear, then select the first one
+        setTimeout(() => {
+          // Press Enter or ArrowDown + Enter to select first result
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, bubbles: true }));
+          setTimeout(() => {
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+            // Clear search and press Escape to close search panel
+            setTimeout(() => {
+              input.focus();
+              document.execCommand('selectAll', false);
+              document.execCommand('delete', false);
+              input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+              resolve();
+            }, 300);
+          }, 200);
+        }, 800);
+      }, 300);
+    } catch {
+      resolve();
+    }
   });
+}
+
+// Scrapes visible messages from the currently open WhatsApp conversation
+function extractWhatsAppMessagesFromDOM() {
+  try {
+    // The main conversation panel
+    const msgContainer = document.querySelector('[role="application"]')
+      || document.querySelector('div[data-tab="8"]')
+      || document.querySelector('#main [role="region"]');
+
+    if (!msgContainer) {
+      // Try broader: find the message list inside #main
+      const main = document.querySelector('#main');
+      if (!main) return { error: 'no_conversation_open', messages: [] };
+    }
+
+    // Find all message rows — WhatsApp wraps each message in a focusable row
+    const messageRows = document.querySelectorAll('#main [role="row"]');
+    if (messageRows.length === 0) {
+      return { error: 'no_messages_found', messages: [] };
+    }
+
+    const messages = [];
+
+    messageRows.forEach((row, index) => {
+      // Skip system/notification messages (date headers, encryption notices, etc.)
+      // Real messages have the class "message-in" or "message-out"
+      const msgIn = row.querySelector('.message-in');
+      const msgOut = row.querySelector('.message-out');
+      const msgEl = msgIn || msgOut;
+      if (!msgEl) return;
+
+      const isOwn = !!msgOut;
+
+      // Extract text content
+      let text = '';
+
+      // Regular text messages: look for selectable text spans
+      const textSpan = msgEl.querySelector('span.selectable-text');
+      if (textSpan) {
+        text = textSpan.innerText || textSpan.textContent || '';
+      }
+
+      // Image/video with caption
+      if (!text) {
+        const captionSpan = msgEl.querySelector('[data-pre-plain-text] span.selectable-text, span.selectable-text');
+        if (captionSpan) {
+          text = captionSpan.innerText || '';
+        }
+      }
+
+      // Media messages without text
+      if (!text) {
+        if (msgEl.querySelector('[data-testid="media-url-provider"]') || msgEl.querySelector('img[src*="blob:"]')) {
+          text = '[Photo]';
+        } else if (msgEl.querySelector('[data-testid="audio-player"]') || msgEl.querySelector('[data-testid="ptt-player"]')) {
+          text = '[Voice message]';
+        } else if (msgEl.querySelector('[data-testid="video-player"]')) {
+          text = '[Video]';
+        } else if (msgEl.querySelector('[data-testid="document-thumb"]') || msgEl.querySelector('[data-icon="document"]')) {
+          text = '[File]';
+        } else if (msgEl.querySelector('[data-testid="sticker"]') || msgEl.querySelector('img[data-plain-text]')) {
+          text = '[Sticker]';
+        } else if (msgEl.querySelector('[data-testid="location"]')) {
+          text = '[Location]';
+        } else if (msgEl.querySelector('[data-testid="poll-bubble"]')) {
+          text = '[Poll]';
+        } else if (msgEl.querySelector('[data-testid="contact-card"]')) {
+          text = '[Contact]';
+        }
+      }
+
+      // If still no text, try getting any visible text content from the message bubble
+      if (!text) {
+        const copyable = msgEl.querySelector('div.copyable-text');
+        if (copyable) {
+          text = copyable.innerText || '';
+        }
+      }
+
+      if (!text) return; // Skip if we couldn't extract anything
+
+      // Extract timestamp
+      let time = '';
+      const timeEl = msgEl.querySelector('[data-pre-plain-text]');
+      if (timeEl) {
+        // data-pre-plain-text is like "[10:30 AM, 3/28/2026] Name: "
+        const pre = timeEl.getAttribute('data-pre-plain-text') || '';
+        const timeMatch = pre.match(/\[([^\]]+)\]/);
+        if (timeMatch) {
+          time = timeMatch[1].split(',')[0].trim();
+        }
+      }
+      if (!time) {
+        // Fallback: find the time span inside the message metadata
+        const metaSpans = msgEl.querySelectorAll('span[dir="auto"]');
+        metaSpans.forEach((s) => {
+          const txt = s.textContent || '';
+          if (/^\d{1,2}:\d{2}/.test(txt) && txt.length < 15) {
+            time = txt.trim();
+          }
+        });
+      }
+
+      // Extract sender name (for group chats)
+      let senderName = '';
+      if (!isOwn) {
+        const prePlain = msgEl.querySelector('[data-pre-plain-text]');
+        if (prePlain) {
+          const pre = prePlain.getAttribute('data-pre-plain-text') || '';
+          // Format: "[time, date] Name: "
+          const nameMatch = pre.match(/\]\s*(.+?):\s*$/);
+          if (nameMatch) {
+            senderName = nameMatch[1].trim();
+          }
+        }
+      }
+
+      messages.push({
+        id: `msg-${index}`,
+        text: text.trim(),
+        time,
+        isOwn,
+        senderName,
+      });
+    });
+
+    return { messages };
+  } catch (e) {
+    return { error: e.message || 'extraction_error', messages: [] };
+  }
 }
 
 // This function runs in the context of the web page

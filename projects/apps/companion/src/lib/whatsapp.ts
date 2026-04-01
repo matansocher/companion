@@ -27,13 +27,13 @@ export async function getWhatsAppChats(): Promise<WhatsAppChatsResponse> {
   });
 }
 
-export async function getWhatsAppMessages(chatId: string): Promise<WhatsAppMessagesResponse> {
+export async function getWhatsAppMessages(chatId: string, chatName: string): Promise<WhatsAppMessagesResponse> {
   if (!isExtensionContext()) {
     return { messages: [], error: 'not_extension' };
   }
 
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: 'GET_WHATSAPP_MESSAGES', chatId }, (response) => {
+    chrome.runtime.sendMessage({ type: 'GET_WHATSAPP_MESSAGES', chatId, chatName }, (response) => {
       if (chrome.runtime.lastError) {
         resolve({ messages: [], error: chrome.runtime.lastError.message });
         return;

@@ -202,14 +202,14 @@ function ConversationView({ chat, onBack }: { chat: WhatsAppChat; onBack: () => 
 
   const loadMessages = useCallback(async () => {
     setState({ status: 'loading' });
-    const result = await getWhatsAppMessages(chat.chatId);
+    const result = await getWhatsAppMessages(chat.chatId, chat.name);
 
     if (result.error) {
       setState({ status: 'error', message: result.error });
     } else {
       setState({ status: 'ok', messages: result.messages });
     }
-  }, [chat.chatId]);
+  }, [chat.chatId, chat.name]);
 
   useEffect(() => {
     loadMessages();
