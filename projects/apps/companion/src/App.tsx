@@ -8,7 +8,6 @@ import { FocusSettings } from './components/FocusSettings';
 import { PageDetails } from './components/PageDetails';
 import { Settings } from './components/Settings';
 import { Telegram } from './components/Telegram';
-import { WhatsApp } from './components/WhatsApp';
 import { GeoGuesser } from './components/GeoGuesser';
 import { clearAnalyticsData, exportData, getAnalyticsSettings, getFocusBudgets, saveAnalyticsSettings, saveFocusBudgets } from './lib/analytics-storage';
 import { apiClient } from './lib/api';
@@ -174,7 +173,6 @@ function App() {
         {activeTab === 'analytics' && <Analytics onSelectDomain={(domain) => setSubView({ name: 'pageDetails', domain })} />}
         {activeTab === 'chat' && <Chat messages={messages} onSendMessage={handleSendMessage} isLoading={isLoading} />}
         {activeTab === 'telegram' && <Telegram />}
-        {activeTab === 'whatsapp' && <WhatsApp />}
         {activeTab === 'geoguesser' && <GeoGuesser />}
       </div>
 
