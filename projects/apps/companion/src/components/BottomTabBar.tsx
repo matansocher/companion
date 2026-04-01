@@ -1,13 +1,12 @@
-import { BarChart3, MessageSquare, Send, MapPin } from 'lucide-react';
+import { BarChart3, MessageSquare, Send } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-export type TabName = 'analytics' | 'chat' | 'telegram' | 'geoguesser';
+export type TabName = 'analytics' | 'chat' | 'telegram';
 
 const tabs: { name: TabName; label: string; icon: typeof BarChart3 }[] = [
   { name: 'analytics', label: 'Usage', icon: BarChart3 },
   { name: 'chat', label: 'Chat', icon: MessageSquare },
   { name: 'telegram', label: 'Telegram', icon: Send },
-  { name: 'geoguesser', label: 'GeoGuesser', icon: MapPin },
 ];
 
 type BottomTabBarProps = {
